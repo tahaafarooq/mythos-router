@@ -13,7 +13,6 @@
 ## Claude Opus 4.7 · Strict Write Discipline · Zero Slop
 **A local CLI power tool for verifiable AI-assisted coding.**
 
-<br />
 
 [What is this?](#what-is-this) • [Features](#features) • [Installation](#installation) • [Usage](#usage) • [Architecture](#architecture) • [Token Budget](#token-usage--budget) • [SDK](#-sdk-usage-for-agentic-systems)
 
@@ -63,6 +62,7 @@ Zero slop. Zero hallucinated state. Full adaptive thinking.
 |  **Correction Turns** | Model gets 2 retries to match filesystem reality, then yields |
 |  **Integrity Gate** | `verify` command and startup hashing ensure zero drift |
 |  **Token Limiter** | Budget cap with graceful save — progress saved to MEMORY.md, never lose work |
+|  **Session Resume** | Pick up exactly where you left off after a crash or exit (`--resume`) |
 |  **Dry-Run Mode** | Preview every file operation before it executes — full transparency |
 |  **Verbose Tracing** | See exactly what the AI is parsing, thinking, and verifying |
 |  **Budget Analytics** | Persistent tracking of cost across sessions and projects via `stats` |
@@ -139,6 +139,7 @@ mythos chat -s react         # Load the 'react' expert skill
 mythos chat --test-cmd "npm test" # Enable autonomous test-driven self-healing
 mythos chat --effort low     # Budget mode (Haiku 3)
 mythos chat --effort medium  # Balanced (Sonnet 3.5)
+mythos chat --resume         # Resume your previous session exactly where you left off
 mythos chat --dry-run        # Preview all file changes before executing
 mythos chat --verbose        # See full SWD traces and thinking
 mythos chat --branch refactor # Isolate session in a fresh git branch
@@ -390,10 +391,12 @@ When the budget is reached, mythos doesn't just kill your session — it perform
 ```
 ⏸ BUDGET REACHED — Graceful Save
   498,231 tokens consumed across 25 turns (~$7.4200).
-  Progress saved to MEMORY.md. Resume with mythos chat to continue.
+  Progress saved to MEMORY.md. Resume with mythos chat --resume to continue.
   Increase limits: mythos chat --max-tokens 1000000 --max-turns 50
   Disable limits:  mythos chat --no-budget
 ```
+
+The system automatically saves your conversation history and budget state to `~/.mythos-router/sessions/latest.json`. You can instantly restore your exact context by running `mythos chat --resume`.
 
 Token counts, estimated cost, and budget status are displayed after every chat response.
 
