@@ -15,6 +15,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import { createHash } from 'node:crypto';
 import type { UnifiedResponse } from './providers/types.js';
+import { getDatabaseSync } from './sqlite-loader.js';
 
 // ── Constants ────────────────────────────────────────────────
 const CACHE_DIR = path.join(os.homedir(), '.mythos-router');
@@ -55,7 +56,7 @@ export function generateCacheKey(input: CacheKeyInput): string {
 
 // ── Response Cache ───────────────────────────────────────────
 export class ResponseCache {
-  private db: InstanceType<typeof import('node:sqlite').DatabaseSync> | null = null;
+  private db: InstanceType<ReturnType<typeof getDatabaseSync>> | null = null;
   private ttlMs: number;
   private enabled: boolean;
 
@@ -65,12 +66,11 @@ export class ResponseCache {
   }
 
   // ── Lazy Initialization ──────────────────────────────────
-  private ensureDb(): InstanceType<typeof import('node:sqlite').DatabaseSync> {
+  private ensureDb(): InstanceType<ReturnType<typeof getDatabaseSync>> {
     if (this.db) return this.db;
 
-    // Dynamic import to avoid crash if sqlite is unavailable
     try {
-      const { DatabaseSync } = require('node:sqlite');
+      const DatabaseSync = getDatabaseSync();
 
       if (!fs.existsSync(CACHE_DIR)) {
         fs.mkdirSync(CACHE_DIR, { recursive: true });
