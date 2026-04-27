@@ -4,6 +4,9 @@
 //  Main CLI entry point — Commander.js program
 // ─────────────────────────────────────────────────────────────
 
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { chatCommand } from './commands/chat.js';
 import { verifyCommand } from './commands/verify.js';
@@ -15,7 +18,14 @@ import {
   DEFAULT_MAX_TURNS,
 } from './config.js';
 
+// ── Read version from package.json (single source of truth) ──
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(resolve(__dirname, '..', 'package.json'), 'utf-8'));
+
 const program = new Command();
+
+// ── Restore cursor on any exit (spinner crash safety) ────────
+process.on('exit', () => process.stdout.write('\x1b[?25h'));
 
 program
   .name('mythos')
@@ -23,7 +33,7 @@ program
     'Capybara-tier CLI router — Claude Opus 4.7 with Adaptive Thinking, ' +
     'Strict Write Discipline, and Self-Healing Memory.',
   )
-  .version('1.3.0');
+  .version(pkg.version);
 
 // ── mythos chat ──────────────────────────────────────────────
 program
