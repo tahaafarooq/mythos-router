@@ -52,8 +52,8 @@ function isRetryableError(err: unknown): boolean {
 
   // Network errors
   if (msg.includes('econnrefused') || msg.includes('econnreset') ||
-      msg.includes('etimedout') || msg.includes('enotfound') ||
-      msg.includes('fetch failed') || msg.includes('network')) {
+    msg.includes('etimedout') || msg.includes('enotfound') ||
+    msg.includes('fetch failed') || msg.includes('network')) {
     return true;
   }
 
@@ -209,7 +209,7 @@ export class ProviderOrchestrator {
 
       const scoreA = calculateScore(a.metrics, taskType);
       const scoreB = calculateScore(b.metrics, taskType);
-      
+
       // Tie-breaker: if scores are virtually identical (e.g., at startup),
       // respect the explicitly configured provider priority.
       if (Math.abs(scoreA - scoreB) < 0.01) {
@@ -318,7 +318,7 @@ export class ProviderOrchestrator {
     candidates: ProviderSlot[]
   ): void {
     if (candidates.length === 0) return;
-    
+
     const totalChars = messages.reduce((acc, m) => acc + m.content.length, 0);
     const tokenEstimate = Math.ceil(totalChars / 4);
     let bucket = '<4k';
@@ -431,9 +431,6 @@ export class ProviderOrchestrator {
         return response;
 
       } catch (err) {
-        // Release concurrency slot
-        slot.activeConcurrency--;
-
         const error = err instanceof Error ? err : new Error(String(err));
 
         // If this was a watchdog abort, mark incomplete
@@ -448,7 +445,7 @@ export class ProviderOrchestrator {
         fallbackTriggered = true;
 
         const reason = extractFallbackReason(err);
-        
+
         this.telemetry.logFailure({
           timestamp: Date.now(),
           provider: slot.provider.id,
@@ -480,10 +477,9 @@ export class ProviderOrchestrator {
         // Try next provider
         continue;
       } finally {
-        // Ensure concurrency slot is released (if not already)
-        if (slot.activeConcurrency > 0) {
-          slot.activeConcurrency--;
-        }
+        // Single owner of concurrency release — runs exactly once
+        // regardless of success (return) or failure (continue)
+        slot.activeConcurrency--;
       }
     }
 
@@ -536,7 +532,6 @@ export class ProviderOrchestrator {
         return response;
 
       } catch (err) {
-        slot.activeConcurrency--;
         const error = err instanceof Error ? err : new Error(String(err));
         this.recordFailure(slot, error);
         retryCount++;
@@ -558,9 +553,8 @@ export class ProviderOrchestrator {
 
         continue;
       } finally {
-        if (slot.activeConcurrency > 0) {
-          slot.activeConcurrency--;
-        }
+        // Single owner of concurrency release
+        slot.activeConcurrency--;
       }
     }
 
