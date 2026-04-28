@@ -8,7 +8,7 @@ import { createHash } from 'node:crypto';
 import { resolve, relative, isAbsolute, dirname, basename } from 'node:path';
 
 // ── Public Types ─────────────────────────────────────────────
-export type ActionIntent = 'MUTATE' | 'NOOP';
+export type ActionIntent = 'MUTATE' | 'NOOP' | 'UNKNOWN';
 
 export interface FileAction {
   path: string;
@@ -377,10 +377,14 @@ export function parseActions(output: string): FileAction[] {
         continue;
       }
 
+      let resolvedIntent: ActionIntent = 'MUTATE';
+      if (intent?.toUpperCase() === 'NOOP') resolvedIntent = 'NOOP';
+      if (intent?.toUpperCase() === 'UNKNOWN') resolvedIntent = 'UNKNOWN';
+
       actions.push({
         path,
         operation: opUpper as FileAction['operation'],
-        intent: (intent?.toUpperCase() === 'NOOP' ? 'NOOP' : 'MUTATE') as ActionIntent,
+        intent: resolvedIntent,
         contentHash,
         description,
         content,
