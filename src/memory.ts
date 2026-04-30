@@ -1,8 +1,3 @@
-// ─────────────────────────────────────────────────────────────
-//  mythos-router :: memory.ts
-//  Self-Healing Memory — Authority-Based Derivative Indexing
-// ─────────────────────────────────────────────────────────────
-
 import { readFileSync, writeFileSync, existsSync, statSync, appendFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -116,7 +111,7 @@ export function rebuildIndex(dryRun = false): void {
   if (!existsSync(mdPath)) return;
 
   if (dryRun) {
-    console.log(`${dryRunBadge()} ${c.dim}Would rebuild derivative index from MEMORY.md${c.reset}`);
+    console.log(`${dryRunBadge()} ${c.dim}Would rebuild memory index from MEMORY.md${c.reset}`);
     return;
   }
 
@@ -144,7 +139,7 @@ export function rebuildIndex(dryRun = false): void {
       .run('manifest_hash', hash);
 
     db.exec('COMMIT;');
-    success(`derivative index rebuilt from MEMORY.md (${entries.length} entries)`);
+    success(`Memory index rebuilt (${entries.length} entries)`);
   } catch (err: any) {
     db.exec('ROLLBACK;');
     throw err;
@@ -178,14 +173,14 @@ export function initMemory(dryRun = false): void {
 
       if (!storedHashRow || storedHashRow.value !== currentHash) {
         if (!storedHashRow) {
-          info('initializing derivative index artifact...');
+          info('Initializing memory index...');
         } else {
-          warn('derivative index out of sync with authority — rebuilding...');
+          warn('Memory index out of sync — rebuilding...');
         }
         rebuildIndex();
       }
     } catch (err: any) {
-      warn(`failed to verify derivative index: ${err.message}`);
+      warn(`Failed to verify memory index: ${err.message}`);
     }
   }
 }
@@ -220,7 +215,7 @@ export function appendEntry(action: string, result: string, dryRun = false): voi
     db.prepare('INSERT OR REPLACE INTO sync_cache (key, value) VALUES (?, ?)')
       .run('manifest_hash', hash);
   } catch (err: any) {
-    warn(`failed to update derivative index: ${err.message}`);
+    warn(`Failed to update memory index: ${err.message}`);
   }
 }
 
@@ -369,11 +364,11 @@ export function writeCompressedMemory(
 
   writeFileSync(path, content, 'utf-8');
 
-  // Authority Rule: Rebuild index to reflect the new compressed reality
+  // Rebuild search index to reflect the compressed memory
   try {
     rebuildIndex();
   } catch (err: any) {
-    warn(`failed to rebuild index after dream: ${err.message}`);
+    warn(`Failed to rebuild memory index after dream: ${err.message}`);
   }
 }
 
