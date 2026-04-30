@@ -58,7 +58,6 @@
 | Area | Consideration |
 |------|------|
 | CLI output serialization | Add `--json` mode for CI and automation usage |
-| Project initialization | `mythos init` to scaffold ignore rules, memory store, and project detection |
 | Error classification | Replace string-matching with structured error types in orchestrator |
 | Telemetry query robustness | Replace ID-based pagination with deterministic ordering (`ORDER BY id DESC LIMIT`) |
 | Storage scalability | Current JSON-based metrics storage is sufficient until large session volumes (~5k+ sessions) |
