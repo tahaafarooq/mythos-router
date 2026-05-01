@@ -19,10 +19,11 @@ interface ModelPricing {
 
 const PRICING_TABLE: Record<string, ModelPricing> = {
   // ── Anthropic ────────────────────────────────────────────
-  'claude-opus-4-7':      { inputPer1M: 15.00,  outputPer1M: 75.00 },
-  'claude-opus-4-6':      { inputPer1M: 15.00,  outputPer1M: 75.00 },
-  'claude-sonnet-4':      { inputPer1M: 3.00,   outputPer1M: 15.00 },
+  'claude-opus-4-7':      { inputPer1M: 5.00,   outputPer1M: 25.00 },
+  'claude-opus-4-6':      { inputPer1M: 5.00,   outputPer1M: 25.00 },
+  'claude-sonnet-4-6':    { inputPer1M: 3.00,   outputPer1M: 15.00 },
   'claude-sonnet-3-5':    { inputPer1M: 3.00,   outputPer1M: 15.00 },
+  'claude-haiku-4-5-20251001': { inputPer1M: 1.00,   outputPer1M: 5.00 },
   'claude-haiku-3':       { inputPer1M: 0.25,   outputPer1M: 1.25 },
 
   // ── OpenAI ───────────────────────────────────────────────
