@@ -1,16 +1,45 @@
 // ─────────────────────────────────────────────────────────────
 //  mythos-router :: git.ts
 //  Primitive Git operations (zero-dependency)
+//
+//  Security: All commands use execFileSync with argument arrays
+//  to prevent shell injection. No shell interpolation allowed.
 // ─────────────────────────────────────────────────────────────
 
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
+
+// ── Branch Name Validation ─────────────────────────────────
+// Git ref names: no space, ~, ^, :, ?, *, [, \, control chars, "..", "@{", trailing ".", leading "-"
+const BRANCH_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9._\-/]*[a-zA-Z0-9]$/;
+
+function validateBranchName(name: string): void {
+  if (!name || name.length > 255) {
+    throw new Error(`Invalid branch name: too ${name ? 'long' : 'short'}.`);
+  }
+  if (!BRANCH_NAME_RE.test(name)) {
+    throw new Error(
+      `Invalid branch name: "${name}". ` +
+      `Only alphanumeric, dots, hyphens, underscores, and forward slashes allowed. ` +
+      `Must start and end with an alphanumeric character.`,
+    );
+  }
+  if (name.includes('..') || name.includes('@{')) {
+    throw new Error(`Invalid branch name: "${name}" contains forbidden sequence.`);
+  }
+}
+
+function validateCommitMessage(message: string): void {
+  if (!message || message.length > 1000) {
+    throw new Error(`Invalid commit message: too ${message ? 'long' : 'short'}.`);
+  }
+}
 
 /**
  * Checks if the current working directory is inside a Git repository.
  */
 export function isGitRepo(): boolean {
   try {
-    execSync('git rev-parse --is-inside-work-tree', { stdio: 'ignore' });
+    execFileSync('git', ['rev-parse', '--is-inside-work-tree'], { stdio: 'ignore' });
     return true;
   } catch {
     return false;
@@ -23,7 +52,7 @@ export function isGitRepo(): boolean {
  */
 export function hasUncommittedChanges(): boolean {
   try {
-    const status = execSync('git status --porcelain', { encoding: 'utf-8' }).trim();
+    const status = execFileSync('git', ['status', '--porcelain'], { encoding: 'utf-8' }).trim();
     return status.length > 0;
   } catch {
     // If git status fails, consider it dirty/unsafe
@@ -36,7 +65,7 @@ export function hasUncommittedChanges(): boolean {
  */
 export function getCurrentBranch(): string {
   try {
-    return execSync('git rev-parse --abbrev-ref HEAD', {
+    return execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
       encoding: 'utf-8',
     }).trim();
   } catch {
@@ -46,11 +75,12 @@ export function getCurrentBranch(): string {
 
 /**
  * Creates and checks out a new Git branch.
- * Throws on failure.
+ * Validates branch name before execution. Throws on failure.
  */
 export function createAndCheckoutBranch(name: string): void {
+  validateBranchName(name);
   try {
-    execSync(`git checkout -b ${name}`, { stdio: 'ignore' });
+    execFileSync('git', ['checkout', '-b', name], { stdio: 'ignore' });
   } catch (err: any) {
     throw new Error(`Git checkout failed: ${err.message}`);
   }
@@ -59,11 +89,13 @@ export function createAndCheckoutBranch(name: string): void {
 /**
  * Commits all changes in the working tree.
  * Runs 'git add -A' and 'git commit -m <message>'.
+ * Validates commit message before execution.
  */
 export function commitChanges(message: string): void {
+  validateCommitMessage(message);
   try {
-    execSync('git add -A', { stdio: 'ignore' });
-    execSync(`git commit -m "${message}"`, { stdio: 'ignore' });
+    execFileSync('git', ['add', '-A'], { stdio: 'ignore' });
+    execFileSync('git', ['commit', '-m', message], { stdio: 'ignore' });
   } catch (err: any) {
     throw new Error(`Git commit failed: ${err.message}`);
   }
@@ -74,7 +106,7 @@ export function commitChanges(message: string): void {
  */
 export function getLatestHash(): string {
   try {
-    return execSync('git rev-parse HEAD', { encoding: 'utf-8' }).trim();
+    return execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf-8' }).trim();
   } catch {
     return 'unknown';
   }
