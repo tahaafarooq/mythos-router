@@ -3,8 +3,8 @@
 //  Deterministic Response Cache — SQLite-backed
 //
 //  Rules:
-//  - Cache is DISABLED for `chat` (external state changes)
-//  - Cache is ACTIVE for `verify` and `dream` (pure reasoning)
+//  - SDK utility only. Not actively wired into CLI commands by default.
+//  - Use for pure reasoning tasks with deterministic inputs.
 //  - Tool invocations BYPASS the cache entirely
 //  - Keys use canonical JSON (sorted keys) + SHA-256
 //  - TTL-based expiration (default: 1 hour)
