@@ -1,3 +1,11 @@
+// ─────────────────────────────────────────────────────────────
+//  mythos-router :: commands/init.ts
+//  Project initialization — single-command onboarding
+//
+//  Creates .mythosignore, MEMORY.md, skills directory.
+//  Validates environment, detects providers, prints next steps.
+// ─────────────────────────────────────────────────────────────
+
 import { existsSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { c, BANNER, hr, heading, success, warn, error as logError } from '../utils.js';
@@ -22,6 +30,7 @@ function checkEnvironment(): EnvCheck[] {
   // 1. Node version
   const nodeVersion = process.version;
   const major = parseInt(nodeVersion.slice(1).split('.')[0]!, 10);
+  const minor = parseInt(nodeVersion.split('.')[1]!, 10);
   checks.push({
     label: 'Node.js',
     ok: major >= MIN_NODE_MAJOR,
@@ -41,7 +50,7 @@ function checkEnvironment(): EnvCheck[] {
     try {
       // Dynamic import check for ESM
       // We just check if the module resolves without actually importing
-      sqliteOk = major >= 22;
+      sqliteOk = major > 22 || (major === 22 && minor >= 5);
     } catch {
       sqliteOk = false;
     }
@@ -93,7 +102,7 @@ function checkProviders(): ProviderCheck[] {
       required: false,
     },
     {
-      name: 'DeepSeek (R1)',
+      name: 'DeepSeek',
       ok: !!detected.deepseek,
       envVar: 'DEEPSEEK_API_KEY',
       required: false,
@@ -116,7 +125,7 @@ function scaffoldIgnoreFile(force: boolean): ScaffoldResult {
 
   const content =
     `# .mythosignore — Paths excluded from mythos scanning\n` +
-    `# One pattern per line. Glob syntax supported.\n` +
+    `# One pattern per line. Supports exact names and simple *.ext ignores.\n` +
     `# Regenerate defaults: mythos init --force\n\n` +
     DEFAULT_IGNORE_PATTERNS.join('\n') + '\n';
 
