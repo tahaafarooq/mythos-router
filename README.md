@@ -56,13 +56,13 @@ Zero slop. Zero hallucinated state. Full adaptive thinking.
 |  **mythos init** | Single-command project onboarding with environment validation and scaffolding |
 |  **Multi-Provider Fallback** | Auto-routes between Anthropic, DeepSeek, and OpenAI with circuit breakers |
 |  **Skills Protocol** | Inject modular expert plugins via YAML frontmatter (`-s mcp`, `-s react`) |
-|  **Deterministic Caching** | SQLite-backed caching for zero-cost, zero-latency repetitive reasoning *(Node 22+)* |
+|  **Deterministic Caching** | SQLite-backed caching for reasoning (SDK only) *(Node 22+)* |
 |  **Adaptive Thinking** | Opus 4.7 with configurable effort levels (high/medium/low) |
 |  **Strict Write Discipline** | Pre/post filesystem snapshots verify every model claim |
 |  **Self-Healing Memory** | Authority-based logging with a rebuildable SQLite FTS5 search index *(Node 22+)* |
 |  **Auto-Healing TDD** | Pass `--test-cmd` for bounded, error-driven autonomous repair loops |
 |  **Correction Turns** | Model gets 2 retries to match filesystem reality, then yields |
-|  **Integrity Gate** | `verify` command and startup hashing ensure zero drift |
+|  **Integrity Gate** | `verify` command ensures referenced memory files still exist |
 |  **Token Limiter** | Budget cap with graceful save — progress saved to MEMORY.md, never lose work |
 |  **Session Resume** | Pick up exactly where you left off after a crash or exit (`--resume`) |
 |  **Dry-Run Mode** | Preview every file operation before it executes — full transparency |
