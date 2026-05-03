@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.0] — 2026-05-03
+
+### Added
+- **Cryptographic Drift Detection** — `mythos verify` now supports SHA-256 hash comparison for SWD-managed files. Hidden `mythos:file` metadata blocks in `MEMORY.md` store file state, allowing the verifier to detect manual edits, missing files, and unexpected content changes.
+- **CLI Smoke Tests** — Added `test/cli.test.ts` to validate the build lifecycle, built CLI execution, and `verify --dry-run` behavior in isolated temporary directories.
+- **Defensive Parser Limits** — Added a 250,000-character SWD block limit and stricter rejection of unsafe paths, including absolute paths, null bytes, traversal attempts, and oversized path values.
+
+### Changed
+- **Terminal Visual System** — Added semantic `theme` and `icon` constants, improved mode badges, updated session/help/exit cards, and standardized success/warning/error/info colors across CLI output.
+- **Signal Handling** — Refined shutdown behavior so graceful exits return code `0`, while uncaught exceptions finalize safely and return code `1`.
+- **Mutation-Safe Cache Behavior** — Updated `ResponseCache` to bypass responses containing `[FILE_ACTION:]`, preventing file-mutating responses from being cached or replayed.
+- **Explicit `/clear` Confirmation** — Replaced interactive confirmation with `/clear confirm` to avoid nested readline conflicts in the chat REPL.
+
+### Fixed
+- **SWD Parser Resilience** — Fixed handling of truncated or malformed `[FILE_ACTION:]` blocks to prevent parser stalls on incomplete model output.
+- **Verify Path Normalization** — Improved path normalization in `verify` to reduce false-positive drift results across relative path formats.
+
+---
+
 ## [1.5.3] — 2026-05-01
 
 ### Fixed
@@ -218,6 +237,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Correction Turns** — max 2 retries before yielding to human.
 - **Dream/Verify Commands** — memory compression and drift detection.
 
+[1.6.0]: https://github.com/thewaltero/mythos-router/releases/tag/v1.6.0
 [1.5.3]: https://github.com/thewaltero/mythos-router/releases/tag/v1.5.3
 [1.5.0]: https://github.com/thewaltero/mythos-router/releases/tag/v1.5.0
 [1.4.0]: https://github.com/thewaltero/mythos-router/releases/tag/v1.4.0
