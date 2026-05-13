@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.1] — 2026-05-13
+
+### Added
+- **Malformed Action Detection** — Mythos now warns when model output appears to include `[FILE_ACTION]` blocks but no valid actions can be parsed, making broken agent output easier to diagnose.
+- **Safety Regression Coverage** — Added tests covering receipt redaction, dry-run wording, and oversized write blocking.
+
+### Changed
+- **Safer Receipt Output** — Receipt test-output tails are now limited to 500 characters and redact obvious API keys, tokens, and secrets before being stored locally.
+
+### Fixed
+- **Large Write Protection** — Oversized `CREATE` and `MODIFY` actions are now blocked before touching disk, reducing the risk of unsafe full-file rewrites.
+
+---
+
 ## [1.7.0] — 2026-05-11
 
 ### Added
@@ -258,6 +272,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Correction Turns** — max 2 retries before yielding to human.
 - **Dream/Verify Commands** — memory compression and drift detection.
 
+[1.7.1]: https://github.com/thewaltero/mythos-router/releases/tag/v1.7.1
 [1.7.0]: https://github.com/thewaltero/mythos-router/releases/tag/v1.7.0
 [1.6.1]: https://github.com/thewaltero/mythos-router/releases/tag/v1.6.1
 [1.6.0]: https://github.com/thewaltero/mythos-router/releases/tag/v1.6.0
