@@ -64,6 +64,7 @@ Zero slop. Zero hallucinated state. Full adaptive thinking.
 |  **Auto-Healing TDD** | Pass `--test-cmd` for bounded, error-driven autonomous repair loops |
 |  **Correction Turns** | Model gets 2 retries to match filesystem reality, then yields |
 |  **Integrity Gate** | `verify` command ensures referenced memory files still exist |
+|  **CI Verification** | `verify --ci` runs read-only PR checks for command-surface, sensitive-file, and receipt risks without an API key |
 |  **Token Limiter** | Budget cap with graceful save — progress saved to MEMORY.md, never lose work |
 |  **Session Resume** | Pick up exactly where you left off after a crash or exit (`--resume`) |
 |  **Dry-Run Mode** | Preview every file operation before it executes — full transparency |
@@ -212,18 +213,47 @@ mythos receipts verify latest  # Re-check current files against receipt hashes
 mythos receipts --json       # Machine-readable output for tooling
 ```
 
-Every non-dry-run SWD file operation writes a local receipt to `.mythos/receipts/`. Receipts include the user request summary, provider/model, token usage, budget snapshot, git branch/commit, per-file before/after hashes, rollback status, and optional `--test-cmd` result. `verify` turns those receipts into a quick drift check for "did the files still match what SWD verified?" Receipts are gitignored by default; force-add only when you want a shared audit trail.
+Every non-dry-run SWD file operation writes a local receipt to `.mythos/receipts/`. Receipts include the user request summary, provider/model, token usage, budget snapshot, git branch/commit, per-file before/after hashes, rollback status, and optional `--test-cmd` result. `verify` turns those receipts into a quick drift check for "did the files still match what SWD verified?" Receipts are local by default and gitignored by default. They may include prompts, file paths, provider metadata, test command names, and a short test output tail. Do not publish raw receipts from private repositories; force-add only when you intentionally want a shared audit trail.
 
-### `mythos verify` — Codebase ↔ Memory Existence Scan
+### `mythos verify` — Local Memory Scan + CI Verification
 
 ```bash
 mythos verify              # Scan and log results to MEMORY.md
 mythos verify --dry-run    # Scan without writing to MEMORY.md
+mythos verify --ci         # Read-only PR/diff verification for GitHub CI
+mythos verify --ci --json  # Machine-readable CI report
+mythos verify --ci --strict # Fail CI on warnings as well as high findings
 ```
 
-Scans your project and cross-references against `MEMORY.md`:
+Local mode scans your project and cross-references against `MEMORY.md`:
 - ✅ **Verified** — Memory logs are present and up to date
 - ❌ **Missing** — Memory references a file that doesn't exist
+
+CI mode does not call a model and does not require an API key. It reviews the current PR/diff for high-impact repo changes such as package scripts, npm lifecycle hooks, GitHub Actions workflows, shell/deploy surfaces, `.env`/`.npmrc`, high-confidence secrets, and changed Mythos receipts.
+
+GitHub Actions example:
+
+```yaml
+name: Mythos Verify
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  mythos-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npx mythos-router verify --ci
+```
+
+See [`docs/CI.md`](docs/CI.md) for exit behavior, strict mode, JSON output, and examples.
 
 ### `mythos dream` — Memory Compression
 
@@ -294,6 +324,7 @@ mythos-router/
 │   ├── swd.ts           # SWD execution kernel (engine, types, parsing, snapshots)
 │   ├── swd-cli.ts       # SWD terminal presentation (verification output, dry-run)
 │   ├── receipts.ts      # SWD trust receipt creation, storage, and verification
+│   ├── ci/              # Read-only CI verification for PR/diff risk review
 │   ├── memory.ts        # MEMORY.md self-healing manager (SQLite FTS5 index)
 │   ├── metrics.ts       # Global metrics store (persistent budget tracking)
 │   ├── diff.ts          # Myers' diff algorithm (zero-dependency)
