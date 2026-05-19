@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9.0] - 2026-05-19
+
+### Added
+- **`mythos run` Command** - Added one-shot prompt execution for tasks that do not need the interactive REPL. The command accepts any prompt, runs it through Mythos once, and exits.
+- **File and Stdin Prompt Sources** - `mythos run` can now read its prompt from a local file with `--file <path>` or from piped input with `--stdin`, making Mythos easier to use in scripts, task files, and editor workflows.
+- **Shared Chat/SWD Pipeline** - `run` reuses the existing chat session initialization, provider routing, SWD verification, receipts, memory logging, budget tracking, skills, and branch sandboxing instead of introducing a separate execution path.
+- **Bounded Run Defaults** - One-shot runs default to a smaller turn budget: one initial model turn, SWD correction turns, and optional test-healing turns only when `--test-cmd` is provided.
+- **Resume-Safe Execution** - `run` records metrics as its own command but does not overwrite the resumable session used by `mythos chat --resume`.
+- **`mythos init --check`** - Added a read-only setup check for environment, providers, `.mythosignore`, `MEMORY.md`, and the local skills directory without scaffolding or modifying files.
+
+### Changed
+- **Command Help Coverage** - CLI smoke coverage now checks that built help output includes the `run` and `init` commands, verifies the `run --help` prompt-source options, and covers `init --check` as a no-write smoke path.
+
+---
+
 ## [1.8.1] - 2026-05-17
 
 ### Fixed
@@ -308,6 +323,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Correction Turns** — max 2 retries before yielding to human.
 - **Dream/Verify Commands** — memory compression and drift detection.
 
+[1.9.0]: https://github.com/thewaltero/mythos-router/releases/tag/v1.9.0
 [1.8.1]: https://github.com/thewaltero/mythos-router/releases/tag/v1.8.1
 [1.8.0]: https://github.com/thewaltero/mythos-router/releases/tag/v1.8.0
 [1.7.1]: https://github.com/thewaltero/mythos-router/releases/tag/v1.7.1
