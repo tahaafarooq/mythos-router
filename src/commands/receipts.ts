@@ -67,6 +67,9 @@ function printReceiptList(limit: number, asJson?: boolean): void {
     );
     console.log(`     ${c.dim}${receipt.summary}${c.reset}`);
     console.log(`     ${c.dim}provider: ${provider} | branch: ${receipt.branch ?? 'none'}${c.reset}`);
+    if (receipt.skills && receipt.skills.length > 0) {
+      console.log(`     ${c.dim}skills: ${receipt.skills.join(', ')}${c.reset}`);
+    }
   }
 }
 
@@ -158,6 +161,10 @@ function printReceiptHeader(receipt: SWDReceipt): void {
   console.log(`  ${c.dim}Provider:${c.reset} ${provider}`);
   console.log(`  ${c.dim}Usage:${c.reset}    ${tokens} | ${cost}`);
   console.log(`  ${c.dim}Git:${c.reset}      ${receipt.git?.branch ?? 'none'} @ ${receipt.git?.commit?.slice(0, 12) ?? 'none'}`);
+  if (receipt.skills && receipt.skills.length > 0) {
+    const skills = receipt.skills.map((skill) => `${skill.id}@${skill.version} (${skill.source})`).join(', ');
+    console.log(`  ${c.dim}Skills:${c.reset}   ${skills}`);
+  }
   if (receipt.test) {
     console.log(`  ${c.dim}Test:${c.reset}     ${receipt.test.command} -> ${receipt.test.status}`);
   }

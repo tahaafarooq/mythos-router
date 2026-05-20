@@ -9,7 +9,7 @@ import { appendEntry, appendMetadataBlock, needsDream, getMemoryContext, printMe
 import { type EffortLevel, MAX_CORRECTION_RETRIES, MODELS, CAPYBARA_SYSTEM_PROMPT, validateApiKey } from '../config.js';
 import { c, Spinner, BANNER, hr, error as logError, warn as logWarn, success as logSuccess, runTestCommand, confirmPrompt, renderSessionCard, renderBadgeRow, renderHelpScreen, renderExitSummary, theme, type SessionCardConfig, type ExitSummaryConfig } from '../utils.js';
 import { SessionBudget } from '../budget.js';
-import { buildSkillPrompt } from '../skills.js';
+import { buildSkillPrompt, type Skill } from '../skills.js';
 import { isGitRepo, hasUncommittedChanges, getCurrentBranch, commitChanges, getLatestHash, createAndCheckoutBranch } from '../git.js';
 import { saveSession, loadSession, formatResumeInfo } from '../session.js';
 import { reviewActions, touchesCommandSurface, touchedWritablePaths, type ActionRiskVerdict } from '../security-policy.js';
@@ -17,6 +17,7 @@ import {
   createSWDReceipt,
   saveSWDReceipt,
   type ReceiptProvider,
+  type ReceiptSkill,
   type ReceiptTestResult,
   type ReceiptTestStatus,
   type ReceiptUsage,
@@ -69,6 +70,7 @@ class ChatSession {
   public timeoutMs?: number;
   public requiresTools?: boolean;
   private ui: ChatUI;
+  private activeSkills: Skill[] = [];
   private touchedFiles = new Set<string>();
   private pendingTestCommandReview = false;
 
@@ -89,6 +91,7 @@ class ChatSession {
       this.forceProvider = skillResult.forceProvider;
       this.allowFallback = skillResult.allowFallback;
       this.timeoutMs = skillResult.timeoutMs;
+      this.activeSkills = skillResult.skills;
       budgetMultiplier = skillResult.budgetMultiplier;
 
       // requiresTools is parsed but no providers implement tool_calling yet.
@@ -102,7 +105,7 @@ class ChatSession {
         this.ui.divider();
         this.ui.log(`${c.cyan}${c.bold}⚡ ACTIVE SKILLS${c.reset}`);
         for (const skill of skillResult.skills) {
-          this.ui.log(`  ${c.green}✔ ${skill.meta.name}${c.dim} (v${skill.meta.version}) - ${skill.meta.description}${c.reset}`);
+          this.ui.log(`  ${c.green}✔ ${skill.meta.name}${c.dim} (v${skill.meta.version}, ${skill.scope}) - ${skill.meta.description}${c.reset}`);
         }
         this.ui.divider();
       }
@@ -464,6 +467,7 @@ class ChatSession {
           estimatedCostUSD: snap.estimatedCostUSD,
         },
         git: getReceiptGitContext(),
+        skills: this.receiptSkills(),
         test: testResult,
       });
       saveSWDReceipt(receipt, false);
@@ -471,6 +475,18 @@ class ChatSession {
     } catch (err: any) {
       this.ui.warn(`Receipt save failed: ${err.message}`);
     }
+  }
+
+  private receiptSkills(): ReceiptSkill[] | undefined {
+    if (this.activeSkills.length === 0) return undefined;
+
+    return this.activeSkills.map((skill) => ({
+      id: skill.id,
+      name: skill.meta.name,
+      version: skill.meta.version,
+      source: skill.scope,
+      path: skill.scope === 'global' ? undefined : skill.filePath,
+    }));
   }
 
   private appendFileMetadata(result: SWDRunResult): void {

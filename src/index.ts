@@ -50,6 +50,29 @@ export { readMemory, writeCompressedMemory, initMemory, appendEntry, needsDream,
 // Export the Deterministic Cache
 export { ResponseCache, generateCacheKey, type CacheKeyInput } from './cache.js';
 
+// Export Skill Pack helpers
+export {
+  loadSkill,
+  listSkills,
+  validateSkill,
+  validateSkills,
+  checkSkills,
+  createSkill,
+  buildSkillPrompt,
+  ensureSkillsDir,
+  getProjectSkillsDir,
+  getGlobalSkillsDir,
+  getSkillsDir,
+  type Skill,
+  type SkillMeta,
+  type SkillScope,
+  type SkillValidation,
+  type SkillListEntry,
+  type SkillCheckIssue,
+  type SkillCheckResult,
+  type CreateSkillOptions,
+} from './skills.js';
+
 // Export SWD Receipts
 export {
   createSWDReceipt,
@@ -65,6 +88,7 @@ export {
   type ReceiptProvider,
   type ReceiptUsage,
   type ReceiptBudget,
+  type ReceiptSkill,
   type ReceiptTestStatus,
   type ReceiptTestResult,
   type ReceiptFileResult,

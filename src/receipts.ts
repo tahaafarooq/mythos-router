@@ -66,6 +66,14 @@ export interface ReceiptBudget {
   estimatedCostUSD: number;
 }
 
+export interface ReceiptSkill {
+  id: string;
+  name: string;
+  version: string;
+  source: 'project' | 'global' | 'path';
+  path?: string;
+}
+
 export type ReceiptTestStatus = string;
 
 export interface ReceiptTestResult {
@@ -119,6 +127,7 @@ export interface ReceiptSummary {
   provider?: string;
   model?: string;
   branch?: string;
+  skills?: string[];
 }
 
 export interface SWDReceiptInput {
@@ -128,6 +137,7 @@ export interface SWDReceiptInput {
   provider?: ReceiptProvider;
   usage?: Omit<ReceiptUsage, 'totalTokens'> | ReceiptUsage;
   budget?: ReceiptBudget;
+  skills?: ReceiptSkill[];
   test?: ReceiptTestResult;
   git?: {
     branch?: string;
@@ -152,6 +162,7 @@ export interface SWDReceipt {
   provider?: ReceiptProvider;
   usage?: ReceiptUsage;
   budget?: ReceiptBudget;
+  skills?: ReceiptSkill[];
   git?: {
     branch?: string;
     commit?: string;
@@ -214,6 +225,26 @@ function toReceiptPath(rootDir: string, filePath: string): string {
   return toPortablePath(filePath);
 }
 
+function toProjectReceiptPath(rootDir: string, filePath: string): string | undefined {
+  if (!filePath) return undefined;
+
+  const nativePath = toNativePath(filePath);
+  const absoluteRoot = path.resolve(rootDir);
+  const absoluteFile = path.isAbsolute(nativePath)
+    ? path.normalize(nativePath)
+    : path.resolve(absoluteRoot, nativePath);
+  const canonicalRoot = realPathForComparison(absoluteRoot);
+  const canonicalFile = realPathForComparison(absoluteFile);
+  const relativePath = path.relative(canonicalRoot, canonicalFile);
+
+  const escapesProject = relativePath === '..' || relativePath.startsWith(`..${path.sep}`);
+  if (!relativePath || escapesProject || path.isAbsolute(relativePath)) {
+    return undefined;
+  }
+
+  return toPortablePath(relativePath);
+}
+
 function resolveReceiptPath(rootDir: string, filePath: string): string {
   const nativePath = toNativePath(filePath);
   return path.isAbsolute(nativePath) ? nativePath : path.resolve(rootDir, nativePath);
@@ -270,6 +301,18 @@ function normalizeFileResult(rootDir: string, result: SWDRunResult['results'][nu
   file.expected = expected.expected;
   file.expectedSource = expected.source;
   return file;
+}
+
+function normalizeReceiptSkill(rootDir: string, skill: ReceiptSkill): ReceiptSkill {
+  const projectPath = skill.path ? toProjectReceiptPath(rootDir, skill.path) : undefined;
+  const normalized: ReceiptSkill = {
+    id: skill.id,
+    name: skill.name,
+    version: skill.version,
+    source: skill.source,
+  };
+  if (projectPath) normalized.path = projectPath;
+  return normalized;
 }
 
 function receiptPayload(receipt: SWDReceipt): Omit<SWDReceipt, 'integrity'> {
@@ -335,6 +378,9 @@ export function createSWDReceipt(input: SWDReceiptInput): SWDReceipt {
   const usage = normalizeUsage(input.usage);
   if (usage) base.usage = usage;
   if (input.budget) base.budget = input.budget;
+  if (input.skills && input.skills.length > 0) {
+    base.skills = input.skills.map((skill) => normalizeReceiptSkill(rootDir, skill));
+  }
   if (input.git) base.git = input.git;
   if (input.test) base.test = input.test;
 
@@ -342,6 +388,7 @@ export function createSWDReceipt(input: SWDReceiptInput): SWDReceipt {
 }
 
 export function saveSWDReceipt(receipt: SWDReceipt, overwrite = true): string {
+  const rootDir = getCurrentRoot();
   const dir = ensureReceiptsDir();
   const filePath = path.join(dir, `${receipt.id}.json`);
 
@@ -351,7 +398,8 @@ export function saveSWDReceipt(receipt: SWDReceipt, overwrite = true): string {
 
   const normalized = withIntegrity({
     ...receiptPayload(receipt),
-    files: receipt.files.map((file) => normalizeStoredFile(getCurrentRoot(), file)),
+    files: receipt.files.map((file) => normalizeStoredFile(rootDir, file)),
+    skills: receipt.skills?.map((skill) => normalizeReceiptSkill(rootDir, skill)),
   });
   writeFileSync(filePath, `${JSON.stringify(normalized, null, 2)}\n`, 'utf-8');
   return filePath;
@@ -427,6 +475,7 @@ export function listReceipts(limit = 10): ReceiptSummary[] {
       provider: receipt.provider?.providerId,
       model: receipt.provider?.modelId,
       branch: receipt.git?.branch,
+      skills: receipt.skills?.map((skill) => `${skill.id}@${skill.version}`),
     }));
 }
 

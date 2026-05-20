@@ -26,6 +26,7 @@ import { statsCommand } from './commands/stats.js';
 import { providersCommand } from './commands/providers.js';
 import { initCommand } from './commands/init.js';
 import { receiptsCommand } from './commands/receipts.js';
+import { skillsCommand } from './commands/skills.js';
 import {
   DEFAULT_MAX_TOKENS_PER_SESSION,
   DEFAULT_MAX_TURNS,
@@ -109,7 +110,7 @@ program
   )
   .option(
     '-s, --skill <names...>',
-    'Inject specific expert skills (e.g., -s mcp -s react)',
+    'Load verified skill packs (e.g., -s repo -s security-review)',
   )
   .option(
     '--resume',
@@ -171,7 +172,7 @@ program
   )
   .option(
     '-s, --skill <names...>',
-    'Inject specific expert skills (e.g., -s mcp -s react)',
+    'Load verified skill packs (e.g., -s repo -s security-review)',
   )
   .action((prompt: string[] | undefined, options: Parameters<typeof runCommand>[1]) => runCommand((prompt ?? []).join(' '), options));
 
@@ -236,6 +237,17 @@ program
   .option('-n, --limit <n>', 'Number of receipts to show when listing', '10')
   .option('--json', 'Print machine-readable JSON')
   .action(receiptsCommand);
+
+// Mythos skill pack management
+program
+  .command('skills')
+  .description('List, inspect, create, and validate Mythos skill packs')
+  .argument('[action]', 'list | show | new | check')
+  .argument('[name]', 'skill name or path')
+  .option('--global', 'Create a user-global skill instead of a project-local skill')
+  .option('--force', 'Overwrite an existing skill when used with new')
+  .option('--json', 'Print machine-readable JSON')
+  .action(skillsCommand);
 
 // ── mythos init ──────────────────────────────────────────────
 program

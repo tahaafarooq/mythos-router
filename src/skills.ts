@@ -1,17 +1,22 @@
-// ─────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 //  mythos-router :: skills.ts
-//  Mythos Skill Protocol — modular expert plugins
+//  Skill packs for repo-specific agent rules and reusable expert instructions.
 //
-//  Skills are SKILL.md files with YAML frontmatter that inject
-//  specialized instructions into the system prompt at runtime.
-//  Zero external dependencies — custom frontmatter parser.
-// ─────────────────────────────────────────────────────────────
+//  Resolution order:
+//    1. Project-local skills: .mythos/skills/<name>/SKILL.md
+//    2. User-global skills:  ~/.mythos-router/skills/<name>/SKILL.md
+//    3. Explicit file or directory paths
+//
+//  Project-local skills intentionally win over global skills. That lets teams
+//  commit a repo operating manual without forcing users to edit their home dir.
+// -----------------------------------------------------------------------------
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-// ── Types ────────────────────────────────────────────────────
+export type SkillScope = 'project' | 'global' | 'path';
+
 export interface SkillMeta {
   name: string;
   version: string;
@@ -27,9 +32,21 @@ export interface SkillMeta {
 }
 
 export interface Skill {
+  id: string;
   meta: SkillMeta;
-  instructions: string;   // The markdown body after frontmatter
+  instructions: string;
   filePath: string;
+  scope: SkillScope;
+}
+
+export interface SkillListEntry {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  path: string;
+  scope: SkillScope;
+  shadowed: boolean;
 }
 
 export interface SkillValidation {
@@ -37,16 +54,55 @@ export interface SkillValidation {
   errors: string[];
 }
 
-// ── Constants ────────────────────────────────────────────────
-const SKILLS_DIR = path.join(os.homedir(), '.mythos-router', 'skills');
+export interface SkillCheckIssue {
+  level: 'error' | 'warning';
+  scope: SkillScope;
+  path: string;
+  message: string;
+}
+
+export interface SkillCheckResult {
+  ok: boolean;
+  checked: number;
+  issues: SkillCheckIssue[];
+}
+
+export interface CreateSkillOptions {
+  scope?: Exclude<SkillScope, 'path'>;
+  force?: boolean;
+  cwd?: string;
+}
+
+const PROJECT_SKILLS_DIR = path.join('.mythos', 'skills');
+const GLOBAL_SKILLS_ENV = 'MYTHOS_SKILLS_DIR';
 const SKILL_FILE = 'SKILL.md';
 
-// ── YAML Frontmatter Parser (minimal, zero-dep) ─────────────
-// Handles: strings, numbers, booleans, and simple arrays (- item)
+export function getProjectSkillsDir(cwd = process.cwd()): string {
+  return path.join(cwd, PROJECT_SKILLS_DIR);
+}
+
+export function getGlobalSkillsDir(): string {
+  const override = process.env[GLOBAL_SKILLS_ENV]?.trim();
+  return override ? path.resolve(override) : path.join(os.homedir(), '.mythos-router', 'skills');
+}
+
+// Backwards-compatible alias used by older code and docs.
+export function getSkillsDir(): string {
+  return getGlobalSkillsDir();
+}
+
+export function ensureSkillsDir(scope: Exclude<SkillScope, 'path'> = 'global', cwd = process.cwd()): string {
+  const dir = scope === 'project' ? getProjectSkillsDir(cwd) : getGlobalSkillsDir();
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
+
 function parseFrontmatter(content: string): { meta: Record<string, unknown>; body: string } {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
   if (!match) {
-    return { meta: {}, body: content };
+    return { meta: {}, body: content.trim() };
   }
 
   const yamlBlock = match[1];
@@ -59,42 +115,35 @@ function parseFrontmatter(content: string): { meta: Record<string, unknown>; bod
   for (const rawLine of yamlBlock.split('\n')) {
     const line = rawLine.replace(/\r$/, '');
 
-    // Array item: "  - value"
     if (/^\s+-\s+/.test(line) && currentKey && currentArray) {
       const value = line.replace(/^\s+-\s+/, '').trim();
-      currentArray.push(value);
+      currentArray.push(String(parseYamlValue(value)));
       continue;
     }
 
-    // Flush previous array
     if (currentKey && currentArray) {
       meta[currentKey] = currentArray;
       currentKey = null;
       currentArray = null;
     }
 
-    // Skip comments and empty lines
     if (line.trim().startsWith('#') || line.trim() === '') continue;
 
-    // Key-value pair: "key: value"
     const kvMatch = line.match(/^([a-zA-Z_-]+):\s*(.*)$/);
     if (!kvMatch) continue;
 
     const key = kvMatch[1].trim();
     const rawValue = kvMatch[2].trim();
 
-    // Empty value means upcoming array
     if (rawValue === '' || rawValue === undefined) {
       currentKey = key;
       currentArray = [];
       continue;
     }
 
-    // Parse value types
     meta[key] = parseYamlValue(rawValue);
   }
 
-  // Flush trailing array
   if (currentKey && currentArray) {
     meta[currentKey] = currentArray;
   }
@@ -103,42 +152,64 @@ function parseFrontmatter(content: string): { meta: Record<string, unknown>; bod
 }
 
 function parseYamlValue(raw: string): string | number | boolean {
-  // Boolean
   if (raw === 'true') return true;
   if (raw === 'false') return false;
-
-  // Number (integer or float)
   if (/^-?\d+(\.\d+)?$/.test(raw)) return parseFloat(raw);
-
-  // String (strip optional quotes)
   return raw.replace(/^["']|["']$/g, '');
 }
 
-// ── Skill Loader ─────────────────────────────────────────────
-export function loadSkill(nameOrPath: string): Skill {
-  let skillPath: string;
+function isPathLike(nameOrPath: string): boolean {
+  return (
+    path.isAbsolute(nameOrPath) ||
+    nameOrPath.startsWith('.') ||
+    nameOrPath.includes('/') ||
+    nameOrPath.includes('\\') ||
+    nameOrPath.endsWith('.md')
+  );
+}
 
-  // Check if it's a direct path or a skill name
-  if (nameOrPath.includes(path.sep) || nameOrPath.includes('/')) {
-    skillPath = path.resolve(nameOrPath);
-  } else {
-    skillPath = path.join(SKILLS_DIR, nameOrPath, SKILL_FILE);
+function skillIdFromPath(skillPath: string): string {
+  const parent = path.basename(path.dirname(skillPath));
+  return parent && parent !== '.' ? parent : path.basename(skillPath, path.extname(skillPath));
+}
+
+function resolvePathLikeSkill(nameOrPath: string): string {
+  const resolved = path.resolve(nameOrPath);
+
+  if (fs.existsSync(resolved)) {
+    const stat = fs.statSync(resolved);
+    return stat.isDirectory() ? path.join(resolved, SKILL_FILE) : resolved;
   }
 
-  if (!fs.existsSync(skillPath)) {
-    throw new Error(
-      `Skill not found: ${nameOrPath}\n` +
-      `  Expected at: ${skillPath}\n` +
-      `  Create it:   mkdir -p ${path.dirname(skillPath)} && touch ${skillPath}`
-    );
+  if (path.basename(resolved) === SKILL_FILE || resolved.endsWith('.md')) {
+    return resolved;
   }
 
-  const content = fs.readFileSync(skillPath, 'utf-8');
+  return path.join(resolved, SKILL_FILE);
+}
+
+function resolveNamedSkill(name: string): { filePath: string; scope: Exclude<SkillScope, 'path'> } | null {
+  const projectPath = path.join(getProjectSkillsDir(), name, SKILL_FILE);
+  if (fs.existsSync(projectPath)) return { filePath: projectPath, scope: 'project' };
+
+  const globalPath = path.join(getGlobalSkillsDir(), name, SKILL_FILE);
+  if (fs.existsSync(globalPath)) return { filePath: globalPath, scope: 'global' };
+
+  return null;
+}
+
+function readSkillFile(filePath: string, scope: SkillScope, id = skillIdFromPath(filePath)): Skill {
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Skill file not found: ${filePath}`);
+  }
+
+  const content = fs.readFileSync(filePath, 'utf-8');
   const { meta, body } = parseFrontmatter(content);
 
-  const skill: Skill = {
+  return {
+    id,
     meta: {
-      name: String(meta.name ?? nameOrPath),
+      name: String(meta.name ?? id),
       version: String(meta.version ?? '0.0.0'),
       description: String(meta.description ?? ''),
       priority: Number(meta.priority ?? 50),
@@ -151,49 +222,167 @@ export function loadSkill(nameOrPath: string): Skill {
       budgetMultiplier: Number(meta['budget-multiplier'] ?? 1.0),
     },
     instructions: body,
-    filePath: skillPath,
+    filePath,
+    scope,
   };
-
-  return skill;
 }
 
-// ── List Available Skills ────────────────────────────────────
-export function listSkills(): Array<{ name: string; description: string; version: string; path: string }> {
-  if (!fs.existsSync(SKILLS_DIR)) return [];
+export function loadSkill(nameOrPath: string): Skill {
+  if (isPathLike(nameOrPath)) {
+    const skillPath = resolvePathLikeSkill(nameOrPath);
+    return readSkillFile(skillPath, 'path');
+  }
 
-  const entries = fs.readdirSync(SKILLS_DIR, { withFileTypes: true });
-  const skills: Array<{ name: string; description: string; version: string; path: string }> = [];
+  const resolved = resolveNamedSkill(nameOrPath);
+  if (!resolved) {
+    throw new Error(
+      `Skill not found: ${nameOrPath}\n` +
+      `  Project: ${path.join(getProjectSkillsDir(), nameOrPath, SKILL_FILE)}\n` +
+      `  Global:  ${path.join(getGlobalSkillsDir(), nameOrPath, SKILL_FILE)}\n` +
+      `  Create:  mythos skills new ${nameOrPath}`,
+    );
+  }
 
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    const skillFile = path.join(SKILLS_DIR, entry.name, SKILL_FILE);
-    if (!fs.existsSync(skillFile)) continue;
+  return readSkillFile(resolved.filePath, resolved.scope, nameOrPath);
+}
 
+function listSkillFiles(scope: Exclude<SkillScope, 'path'>): Array<{ id: string; filePath: string; scope: Exclude<SkillScope, 'path'> }> {
+  const root = scope === 'project' ? getProjectSkillsDir() : getGlobalSkillsDir();
+  if (!fs.existsSync(root)) return [];
+
+  return fs.readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => ({
+      id: entry.name,
+      filePath: path.join(root, entry.name, SKILL_FILE),
+      scope,
+    }))
+    .filter((entry) => fs.existsSync(entry.filePath));
+}
+
+export function listSkills(): SkillListEntry[] {
+  const projectFiles = listSkillFiles('project');
+  const globalFiles = listSkillFiles('global');
+  const projectIds = new Set(projectFiles.map((entry) => entry.id));
+  const entries: SkillListEntry[] = [];
+
+  for (const entry of [...projectFiles, ...globalFiles]) {
     try {
-      const skill = loadSkill(entry.name);
-      skills.push({
+      const skill = readSkillFile(entry.filePath, entry.scope, entry.id);
+      entries.push({
+        id: skill.id,
         name: skill.meta.name,
         description: skill.meta.description,
         version: skill.meta.version,
-        path: skillFile,
+        path: skill.filePath,
+        scope: skill.scope,
+        shadowed: skill.scope === 'global' && projectIds.has(skill.id),
       });
     } catch {
-      // Skip malformed skills
+      // `skills check` reports malformed skill files. Listing stays usable.
     }
   }
 
-  return skills;
+  return entries.sort((a, b) => {
+    if (a.scope !== b.scope) return a.scope === 'project' ? -1 : 1;
+    return a.id.localeCompare(b.id);
+  });
 }
 
-// ── Validate Skill Compatibility ─────────────────────────────
+export function validateSkill(skill: Skill): SkillCheckIssue[] {
+  const issues: SkillCheckIssue[] = [];
+  const add = (level: SkillCheckIssue['level'], message: string) => {
+    issues.push({ level, scope: skill.scope, path: skill.filePath, message });
+  };
+
+  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(skill.id)) {
+    add('error', `Skill directory name "${skill.id}" is not portable. Use letters, numbers, dots, dashes, or underscores.`);
+  }
+  if (!skill.meta.name.trim()) add('error', 'Missing frontmatter: name');
+  if (!skill.meta.version.trim() || skill.meta.version === '0.0.0') add('warning', 'Missing or default frontmatter: version');
+  if (!skill.meta.description.trim()) add('warning', 'Missing frontmatter: description');
+  if (!Number.isFinite(skill.meta.priority)) add('error', 'priority must be a number');
+  if (!Number.isFinite(skill.meta.budgetMultiplier) || skill.meta.budgetMultiplier <= 0) {
+    add('error', 'budget-multiplier must be a positive number');
+  }
+  if (skill.meta.maxOutputTokens !== undefined && (!Number.isFinite(skill.meta.maxOutputTokens) || skill.meta.maxOutputTokens <= 0)) {
+    add('error', 'max-output-tokens must be a positive number');
+  }
+  if (skill.meta.timeoutMs !== undefined && (!Number.isFinite(skill.meta.timeoutMs) || skill.meta.timeoutMs <= 0)) {
+    add('error', 'timeout-ms must be a positive number');
+  }
+  if (!skill.instructions.trim()) add('error', 'Skill instructions are empty');
+
+  return issues;
+}
+
+export function checkSkills(nameOrPath?: string): SkillCheckResult {
+  const skills: Skill[] = [];
+  const issues: SkillCheckIssue[] = [];
+
+  if (nameOrPath) {
+    try {
+      skills.push(loadSkill(nameOrPath));
+    } catch (err) {
+      issues.push({
+        level: 'error',
+        scope: isPathLike(nameOrPath) ? 'path' : 'project',
+        path: nameOrPath,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  } else {
+    for (const entry of [...listSkillFiles('project'), ...listSkillFiles('global')]) {
+      try {
+        skills.push(readSkillFile(entry.filePath, entry.scope, entry.id));
+      } catch (err) {
+        issues.push({
+          level: 'error',
+          scope: entry.scope,
+          path: entry.filePath,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+  }
+
+  for (const skill of skills) {
+    issues.push(...validateSkill(skill));
+  }
+
+  const loadedNames = new Map<string, Skill>();
+  for (const skill of skills) {
+    const previous = loadedNames.get(skill.meta.name);
+    if (previous && previous.filePath !== skill.filePath) {
+      issues.push({
+        level: 'warning',
+        scope: skill.scope,
+        path: skill.filePath,
+        message: `Duplicate skill name "${skill.meta.name}" also appears at ${previous.filePath}`,
+      });
+    }
+    loadedNames.set(skill.meta.name, skill);
+  }
+
+  return {
+    ok: !issues.some((issue) => issue.level === 'error'),
+    checked: skills.length,
+    issues,
+  };
+}
+
 export function validateSkills(skillNames: string[]): SkillValidation {
   const errors: string[] = [];
   const loaded: Skill[] = [];
 
-  // Load all requested skills
   for (const name of skillNames) {
     try {
-      loaded.push(loadSkill(name));
+      const skill = loadSkill(name);
+      const blockingIssues = validateSkill(skill).filter((issue) => issue.level === 'error');
+      if (blockingIssues.length > 0) {
+        errors.push(...blockingIssues.map((issue) => `${skill.id}: ${issue.message}`));
+      }
+      loaded.push(skill);
     } catch (err) {
       errors.push(err instanceof Error ? err.message : String(err));
     }
@@ -203,30 +392,27 @@ export function validateSkills(skillNames: string[]): SkillValidation {
     return { valid: false, errors };
   }
 
-  // Check for incompatibilities
-  const nameSet = new Set(loaded.map(s => s.meta.name));
+  const nameSet = new Set(loaded.flatMap((skill) => [skill.id, skill.meta.name]));
   for (const skill of loaded) {
     for (const incompatible of skill.meta.incompatibleWith) {
       if (nameSet.has(incompatible)) {
         errors.push(
-          `Skill conflict: "${skill.meta.name}" is incompatible with "${incompatible}". ` +
-          `Remove one to proceed.`
+          `Skill conflict: "${skill.meta.name}" is incompatible with "${incompatible}". Remove one to proceed.`,
         );
       }
     }
   }
 
-  // Check for conflicting force-provider directives
   const forcedProviders = loaded
-    .filter(s => s.meta.forceProvider)
-    .map(s => ({ name: s.meta.name, provider: s.meta.forceProvider! }));
+    .filter((skill) => skill.meta.forceProvider)
+    .map((skill) => ({ name: skill.meta.name, provider: skill.meta.forceProvider! }));
 
   if (forcedProviders.length > 1) {
-    const unique = new Set(forcedProviders.map(fp => fp.provider));
+    const unique = new Set(forcedProviders.map((item) => item.provider));
     if (unique.size > 1) {
       errors.push(
         `Provider conflict: Skills force different providers: ` +
-        forcedProviders.map(fp => `"${fp.name}" → ${fp.provider}`).join(', ')
+        forcedProviders.map((item) => `"${item.name}" -> ${item.provider}`).join(', '),
       );
     }
   }
@@ -234,7 +420,6 @@ export function validateSkills(skillNames: string[]): SkillValidation {
   return { valid: errors.length === 0, errors };
 }
 
-// ── Build System Prompt with Skills ──────────────────────────
 export function buildSkillPrompt(basePrompt: string, skillNames: string[]): {
   prompt: string;
   skills: Skill[];
@@ -251,19 +436,17 @@ export function buildSkillPrompt(basePrompt: string, skillNames: string[]): {
 
   const validation = validateSkills(skillNames);
   if (!validation.valid) {
-    throw new Error(`Skill validation failed:\n${validation.errors.map(e => `  • ${e}`).join('\n')}`);
+    throw new Error(`Skill validation failed:\n${validation.errors.map((error) => `  - ${error}`).join('\n')}`);
   }
 
-  const skills = skillNames.map(name => loadSkill(name));
-
-  // Sort by priority (higher priority = loaded first)
+  const skills = skillNames.map((name) => loadSkill(name));
   skills.sort((a, b) => b.meta.priority - a.meta.priority);
 
-  // Build the augmented prompt
-  const skillBlocks = skills.map(s =>
-    `## ACTIVE SKILL: ${s.meta.name} (v${s.meta.version})\n` +
-    `Priority: ${s.meta.priority} | Budget Multiplier: ${s.meta.budgetMultiplier}x\n\n` +
-    s.instructions
+  const skillBlocks = skills.map((skill) =>
+    `## ACTIVE SKILL: ${skill.meta.name} (v${skill.meta.version})\n` +
+    `Source: ${skill.scope} | Path: ${skill.filePath}\n` +
+    `Priority: ${skill.meta.priority} | Budget Multiplier: ${skill.meta.budgetMultiplier}x\n\n` +
+    skill.instructions,
   );
 
   const prompt = basePrompt + '\n\n' +
@@ -271,18 +454,16 @@ export function buildSkillPrompt(basePrompt: string, skillNames: string[]): {
     `The following ${skills.length} skill(s) are loaded. Follow their instructions.\n\n` +
     skillBlocks.join('\n\n---\n\n');
 
-  // Aggregate execution boundaries
-  const budgetMultiplier = skills.reduce((acc, s) => acc * s.meta.budgetMultiplier, 1.0);
+  const budgetMultiplier = skills.reduce((acc, skill) => acc * skill.meta.budgetMultiplier, 1.0);
   const maxOutputTokens = skills
-    .filter(s => s.meta.maxOutputTokens)
-    .reduce((min, s) => Math.min(min, s.meta.maxOutputTokens!), Infinity);
+    .filter((skill) => skill.meta.maxOutputTokens)
+    .reduce((min, skill) => Math.min(min, skill.meta.maxOutputTokens!), Infinity);
   const timeoutMs = skills
-    .filter(s => s.meta.timeoutMs)
-    .reduce((min, s) => Math.min(min, s.meta.timeoutMs!), Infinity);
-  const forceProvider = skills.find(s => s.meta.forceProvider)?.meta.forceProvider;
-
-  const allowFallback = skills.every(s => s.meta.allowFallback !== false);
-  const requiresTools = skills.some(s => s.meta.requiresTools && s.meta.requiresTools.length > 0);
+    .filter((skill) => skill.meta.timeoutMs)
+    .reduce((min, skill) => Math.min(min, skill.meta.timeoutMs!), Infinity);
+  const forceProvider = skills.find((skill) => skill.meta.forceProvider)?.meta.forceProvider;
+  const allowFallback = skills.every((skill) => skill.meta.allowFallback !== false);
+  const requiresTools = skills.some((skill) => skill.meta.requiresTools && skill.meta.requiresTools.length > 0);
 
   return {
     prompt,
@@ -296,14 +477,59 @@ export function buildSkillPrompt(basePrompt: string, skillNames: string[]): {
   };
 }
 
-// ── Initialize Skills Directory ──────────────────────────────
-export function ensureSkillsDir(): void {
-  if (!fs.existsSync(SKILLS_DIR)) {
-    fs.mkdirSync(SKILLS_DIR, { recursive: true });
+function assertPortableSkillName(name: string): void {
+  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(name)) {
+    throw new Error('Skill names must use letters, numbers, dots, dashes, or underscores, and start with a letter or number.');
   }
 }
 
-// ── Get Skills Directory Path ────────────────────────────────
-export function getSkillsDir(): string {
-  return SKILLS_DIR;
+function templateForSkill(name: string): string {
+  return `---
+name: ${name}
+version: 0.1.0
+description: Project-specific operating rules for verified Mythos runs.
+priority: 70
+budget-multiplier: 1.0
+allow-fallback: true
+---
+
+# ${name} Skill
+
+## Purpose
+Describe what this project or workflow needs Mythos to understand before it edits files.
+
+## Read First
+- package.json
+- README.md
+- docs/
+
+## Rules
+- Preserve existing public APIs unless the task explicitly asks for a breaking change.
+- Keep edits focused on the requested files and behavior.
+- Do not change install, CI, deploy, or secret-handling files unless the task explicitly requires it.
+- Explain risk clearly when touching command-affecting files.
+
+## Verification
+- Prefer small, reviewable changes.
+- If tests are relevant, suggest the narrowest command the human can run.
+- Let SWD verify file claims before considering the task complete.
+`;
+}
+
+export function createSkill(name: string, options: CreateSkillOptions = {}): Skill {
+  const trimmed = name.trim();
+  assertPortableSkillName(trimmed);
+
+  const scope = options.scope ?? 'project';
+  const root = ensureSkillsDir(scope, options.cwd ?? process.cwd());
+  const dir = path.join(root, trimmed);
+  const filePath = path.join(dir, SKILL_FILE);
+
+  if (fs.existsSync(filePath) && !options.force) {
+    throw new Error(`Skill already exists: ${filePath}. Use --force to overwrite.`);
+  }
+
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(filePath, templateForSkill(trimmed), 'utf-8');
+  return readSkillFile(filePath, scope, trimmed);
 }

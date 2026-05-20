@@ -11,7 +11,7 @@ import { resolve } from 'node:path';
 import { c, BANNER, hr, heading, success, warn, error as logError } from '../utils.js';
 import { DEFAULT_IGNORE_PATTERNS, MYTHOSIGNORE_FILE, detectProviders } from '../config.js';
 import { initMemory, getMemoryPath } from '../memory.js';
-import { ensureSkillsDir, getSkillsDir, listSkills } from '../skills.js';
+import { ensureSkillsDir, getProjectSkillsDir, listSkills } from '../skills.js';
 
 // ── Constants ────────────────────────────────────────────────
 const MIN_NODE_MAJOR = 20;
@@ -145,10 +145,10 @@ function scaffoldMemory(force: boolean): ScaffoldResult {
 }
 
 function scaffoldSkillsDir(): ScaffoldResult {
-  const dir = getSkillsDir();
+  const dir = getProjectSkillsDir();
   const existed = existsSync(dir);
-  ensureSkillsDir();
-  return { file: '~/.mythos-router/skills/', action: existed ? 'exists' : 'created' };
+  ensureSkillsDir('project');
+  return { file: '.mythos/skills/', action: existed ? 'exists' : 'created' };
 }
 
 function inspectScaffoldState(): ScaffoldResult[] {
@@ -162,8 +162,8 @@ function inspectScaffoldState(): ScaffoldResult[] {
       action: existsSync(getMemoryPath()) ? 'exists' : 'missing',
     },
     {
-      file: '~/.mythos-router/skills/',
-      action: existsSync(getSkillsDir()) ? 'exists' : 'missing',
+      file: '.mythos/skills/',
+      action: existsSync(getProjectSkillsDir()) ? 'exists' : 'missing',
     },
   ];
 }
