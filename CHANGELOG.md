@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.13.0] - 2026-05-25
+
+### Added
+- **MCP Adapter for SWD** - Added `mythos mcp`, a local stdio Model Context Protocol server that exposes Mythos SWD, receipts, and skill inspection tools to MCP-compatible agent clients.
+- **MCP SWD Tools** - Added `swd_dry_run` and `swd_apply` tools that reuse the existing external-agent SWD boundary without calling a model provider, starting a daemon, or duplicating filesystem logic.
+- **MCP Inspection Tools** - Added read-only MCP tools for `receipts_list`, `receipts_show`, `receipts_verify`, `skills_list`, and `skills_check`.
+
+### Security
+- **No HTTP Daemon** - The MCP adapter runs over stdio only, opens no local port, and keeps the same fail-closed sensitive path protection, rollback, and receipt behavior as `mythos swd apply`.
+
+---
+
 ## [1.12.0] - 2026-05-24
 
 ### Added
@@ -368,7 +380,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Correction Turns** — max 2 retries before yielding to human.
 - **Dream/Verify Commands** — memory compression and drift detection.
 
-[1.12.0]: https://github.com/thewaltero/mythos-router/releases/tag/v1.11.0
+[1.13.0]: https://github.com/thewaltero/mythos-router/releases/tag/v1.13.0
+[1.12.0]: https://github.com/thewaltero/mythos-router/releases/tag/v1.12.0
 [1.11.0]: https://github.com/thewaltero/mythos-router/releases/tag/v1.11.0
 [1.10.0]: https://github.com/thewaltero/mythos-router/releases/tag/v1.10.0
 [1.9.0]: https://github.com/thewaltero/mythos-router/releases/tag/v1.9.0
