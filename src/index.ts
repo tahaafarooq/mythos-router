@@ -118,3 +118,14 @@ export { MODELS, CAPYBARA_SYSTEM_PROMPT, getEffort, validateApiKey, validateProv
 export { type ChatUI } from './commands/chat.js';
 
 export { parseExternalAgentInput, applyExternalAgentActions, type ExternalAgentInput, type SWDApplyResult } from './commands/swd.js';
+
+// Export the MCP adapter for embedded hosts and tests
+export {
+  MCP_PROTOCOL_VERSION,
+  MCP_TOOLS,
+  handleMCPMessage,
+  runMCPServer,
+  type JsonRpcResponse,
+  type JsonRpcSuccessResponse,
+  type JsonRpcErrorResponse,
+} from './mcp.js';

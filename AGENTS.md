@@ -17,10 +17,12 @@
 - `src/metrics.ts` — Global metrics store (persistent budget tracking)
 - `src/diff.ts` — Myers' diff algorithm (zero-dependency, line-by-line)
 - `src/git.ts` — Git operations (branching, committing, status)
+- `src/mcp.ts` — MCP stdio adapter for SWD, receipts, and skills tools
 - `src/utils.ts` — Terminal colors, spinner, formatting, badges, confirm prompt
 - `src/index.ts` — Public SDK exports (SWDEngine, parseActions, etc.)
 - `src/commands/chat.ts` — Interactive REPL and one-shot run orchestration (ChatSession + ChatUI abstraction)
 - `src/commands/swd.ts` — Model-free external-agent SWD apply command (`mythos swd apply`)
+- `src/commands/mcp.ts` — MCP stdio server command (`mythos mcp`)
 - `src/commands/init.ts` — Project initialization (environment checks, provider detection, scaffolding)
 - `src/commands/verify.ts` — Codebase ↔ Memory drift scanner (dry-run aware)
 - `src/commands/receipts.ts` — SWD receipt list/show/verify command
@@ -47,6 +49,7 @@
 
 ## External Agent SWD Protocol
 - `mythos swd apply --stdin --json` is the model-free integration point for external/autonomous agents.
+- `mythos mcp` exposes the same boundary to MCP-compatible clients over stdio; it must not start a daemon, open a port, or duplicate SWD logic.
 - It must not require `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `DEEPSEEK_API_KEY`; the external agent brings its own model/key.
 - External SWD input must fail closed: reject oversized input, malformed JSON/actions, path traversal, sensitive paths, and high-impact command-surface changes unless explicitly allowed.
 - Sensitive files such as `.env`, `.npmrc`, private keys, wallet files, and `.git` internals must remain blocked by default.
@@ -70,6 +73,7 @@ npx tsx src/cli.ts run "explain this repo architecture"
 npx tsx src/cli.ts run --file TASK.md
 npx tsx src/cli.ts run "fix the failing smoke test" --dry-run
 your-agent --emit-file-actions | npx tsx src/cli.ts swd apply --stdin --json
+npx tsx src/cli.ts mcp
 npx tsx src/cli.ts verify
 npx tsx src/cli.ts verify --dry-run
 npx tsx src/cli.ts dream
@@ -88,5 +92,6 @@ npm run verify
 npm run dream
 npm run stats
 npm run receipts
+npm run mcp
 npm run init
 ```

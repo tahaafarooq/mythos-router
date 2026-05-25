@@ -10,7 +10,8 @@
   "main": "./dist/index.js",
   "exports": {
     ".": "./dist/index.js",
-    "./cli": "./dist/cli.js"
+    "./cli": "./dist/cli.js",
+    "./mcp": "./dist/mcp.js"
   },
   "files": [
     "dist",
@@ -30,6 +31,7 @@
     "verify": "tsx src/cli.ts verify",
     "dream": "tsx src/cli.ts dream",
     "stats": "tsx src/cli.ts stats",
+    "mcp": "tsx src/cli.ts mcp",
     "init": "tsx src/cli.ts init",
     "rebuild": "tsx -e \"import { rebuildIndex } from './src/memory.js'; rebuildIndex();\""
   },
@@ -52,6 +54,8 @@
     "external-agent",
     "agent-verification",
     "agent-security",
+    "mcp",
+    "model-context-protocol",
     "byok"
   ],
   "author": "thewaltero",

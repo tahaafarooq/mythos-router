@@ -67,6 +67,7 @@ Zero slop. Zero hallucinated state. Full adaptive thinking.
 |  **Integrity Gate** | `verify` command ensures referenced memory files still exist |
 |  **CI Verification** | `verify --ci` runs read-only PR checks for command-surface, sensitive-file, and receipt risks without an API key |
 |  **Bring Your Own Agent** | `mythos swd apply --stdin --json` lets any external agent route file actions through SWD without a Mythos model key |
+|  **MCP Adapter** | `mythos mcp` exposes SWD, receipt, and skill tools over stdio for MCP-compatible agent clients |
 |  **Token Limiter** | Budget cap with graceful save — progress saved to MEMORY.md, never lose work |
 |  **Session Resume** | Pick up exactly where you left off after a crash or exit (`--resume`) |
 |  **Dry-Run Mode** | Preview every file operation before it executes — full transparency |
@@ -121,6 +122,9 @@ mythos chat
 
 # Or use only the model-free SWD layer with your own external agent
 your-agent --emit-file-actions | mythos swd apply --stdin --json
+
+# Or expose Mythos to an MCP-compatible local agent client
+mythos mcp
 ```
 
 ### Or try without installing
@@ -314,6 +318,42 @@ Security defaults:
 - dry-runs do not write files or receipts
 - receipts record the external agent/model as `external:<agent-id>`
 
+### `mythos mcp` — MCP Adapter for SWD
+
+```bash
+mythos mcp
+```
+
+`mcp` runs a local stdio Model Context Protocol server. It does not start an HTTP daemon, open a port, call a model provider, or duplicate the SWD engine. MCP clients launch it as a subprocess and call Mythos tools through JSON-RPC over stdin/stdout.
+
+Example MCP client entry:
+
+```json
+{
+  "mcpServers": {
+    "mythos-router": {
+      "command": "mythos",
+      "args": ["mcp"],
+      "cwd": "/path/to/your/repo"
+    }
+  }
+}
+```
+
+Exposed tools:
+
+| Tool | Behavior |
+|------|----------|
+| `swd_dry_run` | Validates external-agent file actions without writing files or receipts |
+| `swd_apply` | Applies external-agent file actions through SWD, verifies disk state, rolls back failures, and writes receipts by default |
+| `receipts_list` | Lists recent local SWD receipts |
+| `receipts_show` | Reads a receipt by id, file path, or `latest` |
+| `receipts_verify` | Re-checks current files and receipt integrity |
+| `skills_list` | Lists project-local and user-global skill packs |
+| `skills_check` | Validates all skills or one named skill/path |
+
+The mutating MCP tool is still guarded by the same external-agent SWD policy as `mythos swd apply`: safe project-relative paths, sensitive path blocking, explicit `allowRisky` for high-impact command surfaces and deletes, rollback on failed verification, and local receipts for successful non-dry-run applies.
+
 ### `mythos receipts` — SWD Trust Receipts
 
 ```bash
@@ -441,6 +481,7 @@ mythos-router/
 │   ├── metrics.ts       # Global metrics store (persistent budget tracking)
 │   ├── diff.ts          # Myers' diff algorithm (zero-dependency)
 │   ├── git.ts           # Git operations (branching, committing)
+│   ├── mcp.ts           # MCP stdio adapter for SWD, receipts, and skills tools
 │   ├── utils.ts         # Terminal formatting, badges, prompts (zero-dep ANSI)
 │   ├── index.ts         # Public SDK exports
 │   └── commands/
@@ -448,6 +489,7 @@ mythos-router/
 │       ├── init.ts      # Project onboarding and read-only setup checks
 │       ├── verify.ts    # Codebase ↔ Memory scanner (dry-run aware)
 │       ├── swd.ts       # External-agent SWD apply command
+│       ├── mcp.ts       # MCP stdio server command
 │       ├── receipts.ts  # SWD receipt list/show/verify command
 │       ├── skills.ts    # Skill pack list/show/new/check command
 │       ├── learn.ts     # Repo skill generation command

@@ -29,6 +29,7 @@ import { receiptsCommand } from './commands/receipts.js';
 import { skillsCommand } from './commands/skills.js';
 import { learnCommand } from './commands/learn.js';
 import { swdCommand } from './commands/swd.js';
+import { mcpCommand } from './commands/mcp.js';
 import {
   DEFAULT_MAX_TOKENS_PER_SESSION,
   DEFAULT_MAX_TURNS,
@@ -211,6 +212,12 @@ program
   .option('--agent <id>', 'External agent identifier for receipts')
   .option('--model <id>', 'External agent model identifier for receipts')
   .action(swdCommand);
+
+// MCP stdio adapter for external agent tools
+program
+  .command('mcp')
+  .description('Run the Mythos MCP stdio server for SWD, receipts, and skills tools')
+  .action(mcpCommand);
 
 // ── mythos verify ────────────────────────────────────────────
 program
