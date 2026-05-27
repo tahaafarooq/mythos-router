@@ -1,0 +1,17 @@
+{
+  "request": "blocked sensitive path example",
+  "summary": "CREATE: apps/api/.env",
+  "agent": {
+    "id": "example-agent",
+    "model": "external-demo"
+  },
+  "actions": [
+    {
+      "path": "apps/api/.env",
+      "operation": "CREATE",
+      "intent": "MUTATE",
+      "description": "This should be blocked by Mythos",
+      "content": "SECRET=do-not-write\n"
+    }
+  ]
+}

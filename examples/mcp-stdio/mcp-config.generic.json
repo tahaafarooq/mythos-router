@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "mythos-router": {
+      "command": "mythos",
+      "args": [
+        "mcp"
+      ]
+    }
+  }
+}

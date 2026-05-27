@@ -14,7 +14,7 @@
 **A local CLI power tool for verifiable AI-assisted coding.**
 
 
-[What is this?](#what-is-this) • [Features](#features) • [Installation](#installation) • [Usage](#usage) • [Architecture](#architecture) • [Token Budget](#token-usage--budget) • [SDK](#-sdk-usage-for-agentic-systems) • [SWD Protocol](#the-swd-protocol)
+[What is this?](#what-is-this) • [Features](#features) • [Installation](#installation) • [Examples](#integration-examples) • [Usage](#usage) • [Architecture](#architecture) • [Token Budget](#token-usage--budget) • [SDK](#-sdk-usage-for-agentic-systems) • [SWD Protocol](#the-swd-protocol)
 
 
 ---
@@ -133,6 +133,17 @@ mythos mcp
 ```bash
 npx mythos-router chat
 ```
+
+### Integration Examples
+
+Small, runnable examples are available in [`examples/`](examples/):
+
+| Example | Purpose |
+|---------|---------|
+| [`external-agent-json`](examples/external-agent-json/) | Submit structured file actions through `mythos swd apply` without a Mythos model key |
+| [`mcp-stdio`](examples/mcp-stdio/) | Configure an MCP client to launch `mythos mcp` over local stdio |
+| [`project-policy`](examples/project-policy/) | Add enforced repo-local SWD block/confirm rules with `.mythos/policy.json` |
+| [`github-action`](examples/github-action/) | Run read-only `mythos verify --ci` in pull requests |
 
 ### From Source
 

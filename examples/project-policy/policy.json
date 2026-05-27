@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "block": [
+    "contracts/mainnet/**",
+    "infra/prod/**"
+  ],
+  "confirm": [
+    "scripts/**",
+    ".github/workflows/**",
+    "src/payments/**"
+  ],
+  "limits": {
+    "allowDeletes": false,
+    "maxActions": 20,
+    "maxActionContentBytes": 50000
+  }
+}

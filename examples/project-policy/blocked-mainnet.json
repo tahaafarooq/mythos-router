@@ -1,0 +1,17 @@
+{
+  "request": "project policy block example",
+  "summary": "CREATE: contracts/mainnet/Vault.sol",
+  "agent": {
+    "id": "example-agent",
+    "model": "external-demo"
+  },
+  "actions": [
+    {
+      "path": "contracts/mainnet/Vault.sol",
+      "operation": "CREATE",
+      "intent": "MUTATE",
+      "description": "This should be blocked by .mythos/policy.json",
+      "content": "contract Vault {}\n"
+    }
+  ]
+}

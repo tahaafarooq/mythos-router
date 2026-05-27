@@ -1,0 +1,17 @@
+{
+  "request": "external agent example",
+  "summary": "CREATE: agent-output.md",
+  "agent": {
+    "id": "example-agent",
+    "model": "external-demo"
+  },
+  "actions": [
+    {
+      "path": "agent-output.md",
+      "operation": "CREATE",
+      "intent": "MUTATE",
+      "description": "Create a small file through Mythos SWD",
+      "content": "# Agent output\n\nThis file was proposed by an external agent and applied through Mythos SWD.\n"
+    }
+  ]
+}
