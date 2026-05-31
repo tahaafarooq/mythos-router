@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.16.0] - 2026-05-30
+
+### Added
+- **External Agent Action Schema** - Added `schemas/external-agent-actions.schema.json` and `mythos swd validate --file/--stdin --json` so outside agents can validate Mythos-compatible action envelopes before apply.
+- **Task Contracts** - JSON action envelopes can now include per-run `contract` boundaries with `allowedPaths`, `blockedPaths`, `requiredPaths`, and `expectedOutputs`. Contract failures stop before SWD writes anything.
+- **Run Outcomes Ledger** - Added local `.mythos/runs` records plus `mythos runs list` / `mythos runs show latest` for agent/model, receipt id, blocked paths, checks, rollback state, changed files, and task-contract status.
+- **Policy Suggestions** - Added `mythos policy suggest` to inspect repo structure and print suggested block/confirm guardrails without silently writing `.mythos/policy.json`.
+- **MCP Validation Tool** - Added read-only MCP `swd_validate`; MCP `swd_apply` now accepts task contracts and can opt out of run logging with `saveRun: false`.
+- **Compatibility Fixtures** - Added valid and invalid external-agent JSON examples for schema/contract validation.
+
+### Security
+- **Fail-Closed Contracts** - Task contract checks run before security review, sandbox checks, receipts, run history, or filesystem mutation.
+- **No Raw Content in Run History** - Run records store paths, statuses, check summaries, receipt ids, and redacted errors, but not raw agent input or file contents.
+- **Read-Only Policy Inspection** - Policy suggestions are advisory only and never mutate project policy automatically.
+
+---
+
 ## [1.15.0] - 2026-05-29
 
 ### Added
@@ -415,6 +432,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Correction Turns** — max 2 retries before yielding to human.
 - **Dream/Verify Commands** — memory compression and drift detection.
 
+[1.16.0]: https://github.com/thewaltero/mythos-router/releases/tag/v1.16.0
 [1.15.0]: https://github.com/thewaltero/mythos-router/releases/tag/v1.15.0
 [1.14.0]: https://github.com/thewaltero/mythos-router/releases/tag/v1.14.0
 [1.13.0]: https://github.com/thewaltero/mythos-router/releases/tag/v1.13.0
