@@ -206,7 +206,7 @@ class ChatSession {
         }
       );
 
-      this.budget.record(response.usage.inputTokens, response.usage.outputTokens, response.metadata.modelId);
+      this.budget.record(response.usage.inputTokens, response.usage.outputTokens, response.metadata.modelId, response.metadata.providerId);
 
       this.history = [
         { role: 'user', content: `[CONTEXT SUMMARY OF PREVIOUS TURNS]\n${response.text}` },
@@ -271,7 +271,7 @@ class ChatSession {
         this.ui.write(response.text + '\n');
       }
       this.history.push({ role: 'assistant', content: response.text });
-      this.budget.record(response.usage.inputTokens, response.usage.outputTokens, response.metadata.modelId);
+      this.budget.record(response.usage.inputTokens, response.usage.outputTokens, response.metadata.modelId, response.metadata.providerId);
 
       if (this.options.verbose) printVerboseParse(response.text);
 
@@ -565,7 +565,7 @@ class ChatSession {
 
         this.ui.write('\n');
         this.history.push({ role: 'assistant', content: response.text });
-        this.budget.record(response.usage.inputTokens, response.usage.outputTokens, response.metadata.modelId);
+        this.budget.record(response.usage.inputTokens, response.usage.outputTokens, response.metadata.modelId, response.metadata.providerId);
 
         const correctionActions = parseActions(response.text);
         warnIfMalformedFileActionOutput(response.text, correctionActions.length, this.ui);
@@ -698,7 +698,7 @@ class ChatSession {
 
     this.ui.write('\n');
     this.history.push({ role: 'assistant', content: response.text });
-    this.budget.record(response.usage.inputTokens, response.usage.outputTokens, response.metadata.modelId);
+    this.budget.record(response.usage.inputTokens, response.usage.outputTokens, response.metadata.modelId, response.metadata.providerId);
     return response.text;
   }
 

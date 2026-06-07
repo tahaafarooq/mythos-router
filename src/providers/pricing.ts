@@ -19,6 +19,7 @@ interface ModelPricing {
 
 const PRICING_TABLE: Record<string, ModelPricing> = {
   // ── Anthropic ────────────────────────────────────────────
+  'claude-opus-4-8':      { inputPer1M: 5.00,   outputPer1M: 25.00 },
   'claude-opus-4-7':      { inputPer1M: 5.00,   outputPer1M: 25.00 },
   'claude-opus-4-6':      { inputPer1M: 5.00,   outputPer1M: 25.00 },
   'claude-sonnet-4-6':    { inputPer1M: 3.00,   outputPer1M: 15.00 },
@@ -41,22 +42,72 @@ const PRICING_TABLE: Record<string, ModelPricing> = {
 // Fallback pricing for unknown models (conservative estimate)
 const FALLBACK_PRICING: ModelPricing = { inputPer1M: 5.00, outputPer1M: 20.00 };
 
+// ── Per-Provider Price Adjustment ────────────────────────────
+// The PRICING_TABLE above is the published *base* (list) price for each model.
+// The same model can cost a different amount depending on WHICH provider serves
+// it — e.g. an inference marketplace like Surplus resells the same model at a
+// discount. A multiplier scales the base price for a given provider id:
+//
+//     1.0  = base/list price (default — behaviour is unchanged for everyone)
+//     0.7  = 30% cheaper than base
+//     1.2  = 20% more expensive than base
+//
+// IMPORTANT: this engine only changes the cost the router *estimates* (used for
+// ranking providers and for the budget/telemetry numbers it displays). It never
+// changes what you are actually billed — that always follows whichever provider
+// key served the request.
+//
+// Defaults are deliberately 1.0 (no assumed discount) so we never invent
+// numbers. Set the real rate you get via an env var so routing + budget reflect
+// reality, e.g.:
+//
+//     MYTHOS_PRICE_MULTIPLIER_SURPLUS=0.7     # Surplus is 30% cheaper for you
+//     MYTHOS_PRICE_MULTIPLIER_DEEPSEEK=1.0
+//
+// (Env var name = MYTHOS_PRICE_MULTIPLIER_<PROVIDER_ID_UPPERCASE>.)
+const PROVIDER_PRICE_MULTIPLIER: Record<string, number> = {
+  // surplus: 0.7,  // uncomment / set via env to your real Surplus discount
+};
+
+/**
+ * Resolve the price multiplier for a provider. Env vars take precedence over
+ * the built-in defaults; anything missing or invalid falls back to 1.0 (base
+ * price), so an unknown or unconfigured provider behaves exactly as before.
+ */
+export function getProviderMultiplier(providerId?: string): number {
+  if (!providerId) return 1;
+  const envKey = `MYTHOS_PRICE_MULTIPLIER_${providerId.toUpperCase()}`;
+  const envVal = process.env[envKey];
+  if (envVal !== undefined && envVal !== '') {
+    const parsed = Number(envVal);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  const preset = PROVIDER_PRICE_MULTIPLIER[providerId];
+  return Number.isFinite(preset) && preset > 0 ? preset : 1;
+}
+
 // ── Public API ───────────────────────────────────────────────
 
 /**
  * Calculate the cost of a request based on the model used.
  * Falls back to conservative estimates for unknown models.
+ *
+ * Pass `providerId` to apply that provider's price multiplier (e.g. a
+ * marketplace discount). Omitting it keeps the published base price, so all
+ * existing 3-argument callers are unaffected.
  */
 export function calculateCost(
   modelId: string,
   inputTokens: number,
   outputTokens: number,
+  providerId?: string,
 ): number {
   const pricing = PRICING_TABLE[modelId] ?? FALLBACK_PRICING;
+  const multiplier = getProviderMultiplier(providerId);
   return (
     (inputTokens / 1_000_000) * pricing.inputPer1M +
     (outputTokens / 1_000_000) * pricing.outputPer1M
-  );
+  ) * multiplier;
 }
 
 /**

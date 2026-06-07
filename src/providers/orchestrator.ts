@@ -444,6 +444,7 @@ export class ProviderOrchestrator {
           response.metadata.modelId,
           response.usage.inputTokens,
           response.usage.outputTokens,
+          slot.provider.id,
         );
         this.recordSuccess(slot, response.usage.latencyMs, cost);
 
@@ -559,6 +560,7 @@ export class ProviderOrchestrator {
           response.metadata.modelId,
           response.usage.inputTokens,
           response.usage.outputTokens,
+          slot.provider.id,
         );
         this.recordSuccess(slot, response.usage.latencyMs, cost);
         response.metadata.fallbackTriggered = fallbackTriggered;

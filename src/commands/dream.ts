@@ -129,7 +129,8 @@ export async function dreamCommand(options: {
       costUSD = calculateCost(
         response._orchestration.modelId,
         response.inputTokens,
-        response.outputTokens
+        response.outputTokens,
+        response._orchestration.providerId
       );
     } else {
       costUSD = (response.inputTokens * COST_PER_INPUT_TOKEN) + (response.outputTokens * COST_PER_OUTPUT_TOKEN);

@@ -101,13 +101,13 @@ export class SessionBudget {
   }
 
   // ── Record token usage after an API call ─────────────────
-  record(inputTokens: number, outputTokens: number, modelId?: string): void {
+  record(inputTokens: number, outputTokens: number, modelId?: string, providerId?: string): void {
     const input = nonNegativeIntegerOrZero(inputTokens);
     const output = nonNegativeIntegerOrZero(outputTokens);
     this.totalInput += input;
     this.totalOutput += output;
     if (modelId) {
-      this.accumulatedModelCost += calculateCost(modelId, input, output);
+      this.accumulatedModelCost += calculateCost(modelId, input, output, providerId);
       this.hasModelCost = true;
     }
     this.turnCount++;
