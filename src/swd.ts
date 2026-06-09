@@ -3,7 +3,7 @@
 //  Strict Write Discipline — Production API (v1)
 // ─────────────────────────────────────────────────────────────
 
-import { readFileSync, writeFileSync, statSync, existsSync, unlinkSync, realpathSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, statSync, existsSync, unlinkSync, realpathSync, mkdirSync, rmdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve, relative, isAbsolute, dirname, basename } from 'node:path';
 
@@ -105,6 +105,29 @@ function largeWriteBlockedMessage(action: FileAction, bytes: number): string {
   return `Large full-file writes are blocked for ${action.path}: ${bytes} bytes exceeds ${MAX_WRITABLE_ACTION_CONTENT_BYTES}. Split the change into smaller edits.`;
 }
 
+/**
+ * Like mkdirSync(dir, { recursive: true }), but returns the list of directories
+ * that were actually created (deepest-first), so a rollback can remove exactly
+ * those — and only if they remain empty. Never removes pre-existing dirs.
+ */
+function ensureDirRecording(dir: string): string[] {
+  const missing: string[] = [];
+  let cur = dir;
+  // Walk upward collecting non-existent ancestors until we hit one that exists.
+  while (cur && !existsSync(cur)) {
+    missing.push(cur);
+    const parent = dirname(cur);
+    if (parent === cur) break; // reached filesystem root
+    cur = parent;
+  }
+  if (missing.length === 0) return missing;
+  mkdirSync(dir, { recursive: true });
+  // The upward walk pushed the deepest directory first, so `missing` is
+  // already deepest-first — exactly the order rollback needs to remove
+  // children before parents.
+  return missing;
+}
+
 // ── SWD Engine ───────────────────────────────────────────────
 /**
  * Authoritative filesystem execution kernel.
@@ -196,11 +219,27 @@ export class SWDEngine {
         for (const action of actions) {
           this.options.onAction(action);
           try {
-            this.executeAction(action);
+            this.executeAction(action, context);
             context.logExecution(action);
           } catch (err: any) {
             executionError = err instanceof Error ? err.message : String(err);
             overallSuccess = false;
+
+            // Audit completeness: actions that already executed in this batch
+            // are about to be rolled back without ever reaching verification.
+            // Record them explicitly so receipts reflect everything that
+            // touched the disk, not just the action that failed.
+            for (const applied of context.logs.executionOrder) {
+              const aborted: ActionResult = {
+                action: applied,
+                status: 'failed',
+                detail: `Applied but not verified: batch aborted after failure of ${action.path}; rollback attempted.`,
+                before: summarizeSnapshot(context.getSnapshot(applied.path, 'before')),
+              };
+              results.push(aborted);
+              this.options.onVerify(aborted);
+            }
+
             const failed: ActionResult = {
               action,
               status: 'failed',
@@ -269,7 +308,7 @@ export class SWDEngine {
     }
   }
 
-  private executeAction(action: FileAction): void {
+  private executeAction(action: FileAction, ctx?: InternalSessionContext): void {
     const absPath = resolveSafePath(action.path);
     try {
       switch (action.operation) {
@@ -280,8 +319,11 @@ export class SWDEngine {
           if (action.content !== undefined) {
             // Ensure the parent directory exists so CREATE can target a new
             // subdirectory. This mirrors the sandbox apply path and keeps the
-            // isolated-check gate equivalent to the real apply.
-            mkdirSync(dirname(absPath), { recursive: true });
+            // isolated-check gate equivalent to the real apply. Record any
+            // directories we actually create so rollback can remove the ones
+            // it leaves empty (best-effort; never fails the run).
+            const created = ensureDirRecording(dirname(absPath));
+            ctx?.recordCreatedDirs(created);
             writeFileSync(absPath, action.content);
           }
           break;
@@ -365,7 +407,11 @@ export class SWDEngine {
     let anyRolledBack = false;
 
     for (const action of revOrder) {
+      // Mark the path seen up front so a path appearing twice in the execution
+      // order is attempted exactly once — even if that single attempt fails.
       if (seenPaths.has(action.path)) continue;
+      seenPaths.add(action.path);
+
       const absPath = resolveSafePath(action.path);
       const original = ctx.logs.rollbackMap.get(absPath);
       const after = ctx.getCachedAfterSnapshot(action.path);
@@ -381,9 +427,8 @@ export class SWDEngine {
             unlinkSync(absPath);
           }
           anyRolledBack = true;
-          seenPaths.add(action.path);
           this.options.onRollback(action.path, true);
-        } catch (e: any) { 
+        } catch (e: any) {
           const msg = `Rollback failed for ${action.path}: ${e.message}`;
           errors.push(msg);
           this.options.onRollback(action.path, false, e.message);
@@ -394,6 +439,19 @@ export class SWDEngine {
         this.options.onRollback(action.path, false, 'Concurrency drift detected');
       }
     }
+
+    // Best-effort cleanup: remove directories this run created, deepest-first,
+    // but only while they are empty. A non-empty dir (pre-existing sibling
+    // files, or a file we couldn't roll back) is left untouched. Failures here
+    // never escalate — the file-level rollback above is the real guarantee.
+    for (const dir of ctx.logs.createdDirs) {
+      try {
+        if (existsSync(dir)) rmdirSync(dir); // throws ENOTEMPTY if not empty
+      } catch {
+        // Non-empty or already gone — leave it.
+      }
+    }
+
     return { anyRolledBack, errors };
   }
 }
@@ -401,7 +459,21 @@ export class SWDEngine {
 // ── Internal Helpers ─────────────────────────────────────────
 class InternalSessionContext {
   public snapshots = { before: new Map<string, FileSnapshot>(), after: new Map<string, FileSnapshot>() };
-  public logs = { executionOrder: [] as FileAction[], rollbackMap: new Map<string, FileSnapshot>() };
+  public logs = {
+    executionOrder: [] as FileAction[],
+    rollbackMap: new Map<string, FileSnapshot>(),
+    // Directories created by CREATE actions in this run (deepest-first),
+    // candidates for empty-dir cleanup during rollback.
+    createdDirs: [] as string[],
+  };
+
+  public recordCreatedDirs(dirs: string[]): void {
+    for (const dir of dirs) {
+      if (!this.logs.createdDirs.includes(dir)) this.logs.createdDirs.push(dir);
+    }
+    // Keep deepest-first ordering by path length descending as a cheap proxy.
+    this.logs.createdDirs.sort((a, b) => b.length - a.length);
+  }
 
   public getSnapshot(path: string, type: 'before' | 'after'): FileSnapshot {
     const absPath = resolveSafePath(path);
@@ -480,6 +552,37 @@ function summarizeSnapshot(snapshot: FileSnapshot): FileSnapshotSummary {
   };
 }
 
+// True when `idx` sits at the start of a line in `s`, allowing leading
+// indentation (spaces/tabs). Used to anchor protocol markers to line starts so
+// markers *mentioned inside file content* (e.g. docs about this very format)
+// are not mistaken for structure.
+function isAtLineStart(s: string, idx: number): boolean {
+  let i = idx - 1;
+  while (i >= 0 && (s[i] === ' ' || s[i] === '\t')) i--;
+  return i < 0 || s[i] === '\n';
+}
+
+// Next occurrence of `needle` in `s` at or after `from` that is anchored to a
+// line start. Returns -1 when none exists.
+function nextLineStartIndex(s: string, needle: string, from: number): number {
+  let idx = s.indexOf(needle, from);
+  while (idx !== -1 && !isAtLineStart(s, idx)) {
+    idx = s.indexOf(needle, idx + 1);
+  }
+  return idx;
+}
+
+// LAST line-start occurrence of `needle` strictly before `limit`.
+function lastLineStartIndexBefore(s: string, needle: string, from: number, limit: number): number {
+  let best = -1;
+  let idx = nextLineStartIndex(s, needle, from);
+  while (idx !== -1 && idx < limit) {
+    best = idx;
+    idx = nextLineStartIndex(s, needle, idx + 1);
+  }
+  return best;
+}
+
 export function parseActions(output: string): FileAction[] {
   const actions: FileAction[] = [];
   let cursor = 0;
@@ -489,12 +592,27 @@ export function parseActions(output: string): FileAction[] {
   const MAX_ACTION_BLOCK_CHARS = 250_000;
 
   while (true) {
-    const startIdx = output.indexOf(START_TAG, cursor);
+    // Structure markers must sit at a line start. A START/END tag embedded
+    // mid-line inside file content (e.g. "blocks end with [/FILE_ACTION]")
+    // is data, not structure.
+    const startIdx = nextLineStartIndex(output, START_TAG, cursor);
     if (startIdx === -1) break;
 
-    const endIdx = output.indexOf(END_TAG, startIdx);
+    // The block is terminated by the LAST line-start END_TAG before the next
+    // line-start START_TAG (or end of output). Taking the last terminator —
+    // rather than the first — means content that itself contains a line-start
+    // "[/FILE_ACTION]" (parser tests, protocol docs) is no longer silently
+    // truncated at the embedded marker.
+    const nextStartIdx = nextLineStartIndex(output, START_TAG, startIdx + START_TAG.length);
+    const searchLimit = nextStartIdx === -1 ? output.length : nextStartIdx;
+    const endIdx = lastLineStartIndexBefore(output, END_TAG, startIdx, searchLimit);
+
     if (endIdx === -1) {
-      break;
+      // Unterminated block: skip it, but keep scanning so a later
+      // well-formed block in the same output still parses.
+      if (nextStartIdx === -1) break;
+      cursor = nextStartIdx;
+      continue;
     }
 
     if (endIdx - startIdx > MAX_ACTION_BLOCK_CHARS) {
@@ -505,14 +623,20 @@ export function parseActions(output: string): FileAction[] {
     const block = output.slice(startIdx, endIdx + END_TAG.length);
     cursor = endIdx + END_TAG.length;
 
-    const lines = block.split(/\r?\n/).map(l => l.trim());
-    
+    // Header region: everything before the line-start CONTENT: marker (or the
+    // whole block when there is no content). Restricting field extraction to
+    // the header prevents lines *inside file content* that happen to start
+    // with "OPERATION:" / "DESCRIPTION:" etc. from being read as fields.
+    const contentMarkerIdx = nextLineStartIndex(block, 'CONTENT:', 0);
+    const headerRegion = contentMarkerIdx === -1 ? block : block.slice(0, contentMarkerIdx);
+    const lines = headerRegion.split(/\r?\n/).map(l => l.trim());
+
     // 1. Extract Path from the start tag line
     const firstLine = lines[0] || '';
     const pathEndIdx = firstLine.lastIndexOf(']');
     const path = pathEndIdx !== -1 ? firstLine.slice(START_TAG.length, pathEndIdx).trim() : '';
 
-    // 2. Extract single-line fields
+    // 2. Extract single-line fields (header region only)
     const getField = (prefix: string) => {
       const line = lines.find(l => l.toUpperCase().startsWith(prefix.toUpperCase()));
       return line ? line.slice(prefix.length).trim() : undefined;
@@ -523,24 +647,27 @@ export function parseActions(output: string): FileAction[] {
     const contentHash = getField('CONTENT_HASH:');
     const description = getField('DESCRIPTION:');
 
-    // 3. Extract multi-line Content
+    // 3. Extract multi-line Content — from the line-start CONTENT: marker up
+    // to the block's terminating END_TAG (the block already ends at the
+    // correct, last terminator, so lastIndexOf here is exact).
     let content: string | undefined;
-    const contentMarker = 'CONTENT:';
-    const contentStartIdx = block.indexOf(contentMarker);
-    if (contentStartIdx !== -1) {
-      // Content is everything between 'CONTENT:' and '[/FILE_ACTION]'
-      let rawContent = block.slice(contentStartIdx + contentMarker.length, block.lastIndexOf(END_TAG));
-      rawContent = rawContent.replace(/^\r?\n/, '');
-      rawContent = rawContent.replace(/\r?\n$/, '');
+    if (contentMarkerIdx !== -1) {
+      let rawContent = block.slice(contentMarkerIdx + 'CONTENT:'.length, block.lastIndexOf(END_TAG));
+      rawContent = rawContent.replace(/^[ \t]*\r?\n/, '');
+      rawContent = rawContent.replace(/\r?\n[ \t]*$/, '');
       content = rawContent;
     }
 
     if (path && operation && description) {
+      // Traversal check is segment-based: 'a/../b' is rejected, but a
+      // legitimate filename that merely contains '..' (e.g. 'backup..old.txt')
+      // is not. resolveSafePath() re-validates at execution time regardless.
+      const segments = path.split(/[\\/]+/);
       if (
         path.trim() === '' ||
         path.length > 500 ||
         path.includes('\0') ||
-        path.includes('..') ||
+        segments.some(segment => segment === '..') ||
         path.startsWith('/') ||
         isAbsolute(path)
       ) {

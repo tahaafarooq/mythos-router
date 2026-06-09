@@ -49,8 +49,19 @@ const WATCHDOG_LATENCY_MULTIPLIER = 3;
 // ── Retryable Error Detection ────────────────────────────────
 const RETRYABLE_STATUS_CODES = new Set([429, 502, 503, 529]);
 
-function isRetryableError(err: unknown): boolean {
+export function isRetryableError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
+
+  // Prefer a real status code carried on the error object (the Anthropic and
+  // OpenAI SDKs both expose `.status`; fetch-style errors may use `.statusCode`
+  // or nest it under `.response.status`). This is authoritative — far better
+  // than scanning the message, where a byte count like "15029 bytes" or an id
+  // like "req_5290" would otherwise look like a 429/502/503/529.
+  const status = extractStatusCode(err);
+  if (status !== undefined) {
+    return RETRYABLE_STATUS_CODES.has(status);
+  }
+
   const msg = err.message.toLowerCase();
 
   // Network errors
@@ -60,15 +71,33 @@ function isRetryableError(err: unknown): boolean {
     return true;
   }
 
-  // HTTP status code errors
+  // HTTP status code errors — only when the code appears as a standalone token
+  // (not embedded in a larger number/identifier), so "529" matches but
+  // "req_5290" and "15029 bytes" do not.
   for (const code of RETRYABLE_STATUS_CODES) {
-    if (msg.includes(String(code))) return true;
+    const tokenRe = new RegExp(`(?<![0-9])${code}(?![0-9])`);
+    if (tokenRe.test(msg)) return true;
   }
 
   // Anthropic-specific overload messages
   if (msg.includes('overloaded') || msg.includes('rate limit')) return true;
 
   return false;
+}
+
+// Best-effort extraction of an HTTP status code from common SDK error shapes.
+function extractStatusCode(err: unknown): number | undefined {
+  if (typeof err !== 'object' || err === null) return undefined;
+  const anyErr = err as Record<string, unknown>;
+  const candidates: unknown[] = [
+    anyErr.status,
+    anyErr.statusCode,
+    (anyErr.response as Record<string, unknown> | undefined)?.status,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isInteger(candidate)) return candidate;
+  }
+  return undefined;
 }
 
 function extractFallbackReason(err: unknown): OrchestrationEvent['fallbackReason'] {

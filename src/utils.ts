@@ -452,3 +452,40 @@ export function runTestCommand(cmd: string, timeoutMs = 120000, cwd: string = pr
     });
   });
 }
+/**
+ * Heuristic count of failure indicators in test-runner output.
+ *
+ * Used only to drive a cautionary "regression?" warning during the auto-heal
+ * loop — it never gates a decision. It deliberately avoids counting zero-count
+ * phrasings ("0 failures", "no errors", "errors: 0") and the word inside
+ * unrelated identifiers, which the previous naive /fail|error/gi match did not.
+ */
+export function countTestFailures(output: string): number {
+  const lower = output.toLowerCase();
+
+  // Explicit numeric summaries, e.g. "3 failed", "2 failing", "5 errors",
+  // "# fail 4", "failures: 2". Sum every counter we find. The word-then-number
+  // branch accepts bare "fail" so node's TAP summary ("# fail 0") is read as a
+  // counter instead of falling through to the token counter below.
+  let counted = 0;
+  let sawCounter = false;
+  const counterRe = /(?:#\s*)?(?:(\d+)\s+(?:failed|failing|failures?|errors?)|(?:fail(?:ures?|ings?|ed|s)?|errors?)[:\s]+(\d+))/g;
+  for (const match of lower.matchAll(counterRe)) {
+    const n = Number(match[1] ?? match[2]);
+    if (Number.isFinite(n)) {
+      counted += n;
+      sawCounter = true;
+    }
+  }
+  if (sawCounter) return counted;
+
+  // No structured counter: count standalone failure tokens, dropping ones
+  // immediately preceded by "no " or "0 " ("no errors", "0 failures").
+  const tokenRe = /(?<!\w)(?:(no|0)\s+)?(?:fail(?:ed|ure|ures|ing)?|errors?)(?!\w)/g;
+  let tokens = 0;
+  for (const match of lower.matchAll(tokenRe)) {
+    if (match[1]) continue; // "no"/"0" prefix → not a failure
+    tokens++;
+  }
+  return tokens;
+}

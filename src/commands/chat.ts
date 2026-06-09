@@ -7,7 +7,7 @@ import { printSWDResults, dryRunSWD, printVerboseParse } from '../swd-cli.js';
 import { saveSessionMetric } from '../metrics.js';
 import { appendEntry, appendMetadataBlock, needsDream, getMemoryContext, printMemoryStatus, getEntryCount } from '../memory.js';
 import { type EffortLevel, MAX_CORRECTION_RETRIES, MODELS, CAPYBARA_SYSTEM_PROMPT, validateProviderKeys } from '../config.js';
-import { c, Spinner, BANNER, hr, error as logError, warn as logWarn, success as logSuccess, runTestCommand, confirmPrompt, renderSessionCard, renderBadgeRow, renderHelpScreen, renderExitSummary, theme, type SessionCardConfig, type ExitSummaryConfig } from '../utils.js';
+import { c, Spinner, BANNER, hr, error as logError, warn as logWarn, success as logSuccess, runTestCommand, countTestFailures, confirmPrompt, renderSessionCard, renderBadgeRow, renderHelpScreen, renderExitSummary, theme, type SessionCardConfig, type ExitSummaryConfig } from '../utils.js';
 import { SessionBudget } from '../budget.js';
 import { buildSkillPrompt, type Skill } from '../skills.js';
 import { isGitRepo, hasUncommittedChanges, getCurrentBranch, commitChanges, getLatestHash, createAndCheckoutBranch } from '../git.js';
@@ -675,7 +675,7 @@ class ChatSession {
   }
 
   private countTestFailures(output: string): number {
-    return (output.match(/fail|error/gi) || []).length;
+    return countTestFailures(output);
   }
 
   private getTestFailureHint(output: string): string {

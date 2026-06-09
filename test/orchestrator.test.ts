@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { ProviderOrchestrator } from '../src/providers/orchestrator.js';
+import { ProviderOrchestrator, isRetryableError } from '../src/providers/orchestrator.js';
 import {
   type BaseProvider,
   type Message,
@@ -326,5 +326,43 @@ describe('ProviderOrchestrator — selection & resilience', () => {
     assert.equal(response.metadata.providerId, 'stream-ok');
     assert.equal(response.metadata.fallbackTriggered, true);
     assert.equal(failing.streamCalls, 1);
+  });
+});
+
+describe('isRetryableError: status precedence and digit-token matching', () => {
+  it('retries on a real retryable status property', () => {
+    const err = Object.assign(new Error('Too Many Requests'), { status: 429 });
+    assert.equal(isRetryableError(err), true);
+  });
+
+  it('does NOT retry on a non-retryable status property even if the message has digits', () => {
+    const err = Object.assign(new Error('bad request 400 for req 529things'), { status: 400 });
+    assert.equal(isRetryableError(err), false);
+  });
+
+  it('reads status from a nested response object', () => {
+    const err = Object.assign(new Error('server error'), { response: { status: 503 } });
+    assert.equal(isRetryableError(err), true);
+  });
+
+  it('does NOT treat an embedded digit run as a status code', () => {
+    // "15029 bytes" contains "529"; "req_5290" contains "529" — neither is a 529.
+    assert.equal(isRetryableError(new Error('file is 15029 bytes, too large')), false);
+    assert.equal(isRetryableError(new Error('request req_5290 failed validation')), false);
+  });
+
+  it('matches a standalone status token in the message when no status property exists', () => {
+    assert.equal(isRetryableError(new Error('upstream returned 503 Service Unavailable')), true);
+    assert.equal(isRetryableError(new Error('HTTP 429: rate limited')), true);
+  });
+
+  it('still matches network and overload phrasings', () => {
+    assert.equal(isRetryableError(new Error('fetch failed: ECONNRESET')), true);
+    assert.equal(isRetryableError(new Error('Service is overloaded, try again')), true);
+  });
+
+  it('does not retry a plain non-retryable error', () => {
+    assert.equal(isRetryableError(new Error('invalid api key')), false);
+    assert.equal(isRetryableError('not even an error'), false);
   });
 });

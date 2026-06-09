@@ -258,6 +258,27 @@ export function appendMetadataBlock(metadata: Record<string, string>, type: stri
 }
 
 /**
+ * Turn an arbitrary user string into a safe FTS5 MATCH expression.
+ *
+ * FTS5 treats characters like `"`, `*`, `:`, `(`, `)`, `+`, `-`, `^` as query
+ * syntax, so a raw query such as `c++`, `don't`, or `foo(bar` is a *syntax
+ * error* — which previously surfaced as an empty result plus a scary warning
+ * instead of a search. We tokenize on non-alphanumeric runs and wrap each
+ * token as a quoted FTS5 string, OR-ing them together so any term can match.
+ * Returns an empty string when the query has no usable tokens (caller then
+ * skips the search and returns no results, without ever hitting FTS5).
+ */
+function toFtsMatchQuery(query: string): string {
+  const tokens = query
+    .toLowerCase()
+    .split(/[^a-z0-9]+/i)
+    .filter(token => token.length > 0)
+    // Escape embedded double-quotes per FTS5 string rules ("" = literal ").
+    .map(token => `"${token.replace(/"/g, '""')}"`);
+  return tokens.join(' OR ');
+}
+
+/**
  * Surgical retrieval from the derivative SQLite index using FTS5.
  * Returns ranked results matching the query.
  */
@@ -265,6 +286,9 @@ export function searchMemory(query: string, options?: { createIfMissing?: boolea
   if (options?.createIfMissing === false) {
     if (!existsSync(getDbPath())) return [];
   }
+
+  const matchQuery = toFtsMatchQuery(query);
+  if (matchQuery === '') return [];
 
   try {
     const db = getDb();
@@ -276,7 +300,7 @@ export function searchMemory(query: string, options?: { createIfMissing?: boolea
       WHERE memory_fts MATCH ?
       ORDER BY rank
       LIMIT 20
-    `).all(query) as any[];
+    `).all(matchQuery) as any[];
 
     return results.map(r => ({
       timestamp: r.timestamp,

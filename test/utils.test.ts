@@ -11,6 +11,7 @@ import {
   verboseBadge,
   BANNER,
   Spinner,
+  countTestFailures,
 } from '../src/utils.js';
 
 
@@ -179,5 +180,30 @@ describe('Spinner', () => {
     } finally {
       spinner.stop();
     }
+  });
+});
+
+describe('countTestFailures', () => {
+  it('does not count zero-count phrasings as failures', () => {
+    assert.equal(countTestFailures('# tests 262\n# pass 262\n# fail 0'), 0);
+    assert.equal(countTestFailures('0 failures, no errors'), 0);
+    assert.equal(countTestFailures('All checks passed. errors: 0'), 0);
+  });
+
+  it('sums explicit numeric counters', () => {
+    assert.equal(countTestFailures('# fail 3'), 3);
+    assert.equal(countTestFailures('2 failing, 1 failed'), 3);
+    assert.equal(countTestFailures('failures: 4'), 4);
+  });
+
+  it('counts standalone failure tokens when no counter is present', () => {
+    // Two genuine failure mentions, no numeric summary.
+    const out = 'AssertionError: expected true\nTest failed in module A\nError thrown in module B';
+    assert.ok(countTestFailures(out) >= 2);
+  });
+
+  it('does not match the word inside unrelated identifiers', () => {
+    // "errorHandler" / "failsafe" should not register as failures.
+    assert.equal(countTestFailures('loaded errorHandler and failsafe modules ok'), 0);
   });
 });

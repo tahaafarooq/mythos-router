@@ -156,6 +156,26 @@ describe('Memory System', () => {
     assert.equal(res2.length, 3);
   });
 
+  it('handles FTS5 special characters without throwing or returning errors', () => {
+    initMemory();
+    appendEntry('fix c++ compiler error', '✅ success');
+    appendEntry('handle user dont input', '✅ success');
+
+    // These queries would previously be FTS5 *syntax errors* (returning empty
+    // plus a scary warning). They must now resolve to real matches.
+    const plus = searchMemory('c++');
+    assert.equal(plus.length, 1, 'c++ query should match the c++ entry');
+    assert.equal(plus[0]!.action, 'fix c++ compiler error');
+
+    // Unbalanced quote / apostrophe must not throw and must still find a term.
+    const quote = searchMemory(`dont"`);
+    assert.equal(quote.length, 1, 'apostrophe/quote query should still match');
+
+    // A query with no usable tokens returns empty cleanly (never hits FTS5).
+    const empty = searchMemory('()*:^');
+    assert.equal(empty.length, 0);
+  });
+
   it('writes compressed memory and triggers index rebuild', () => {
     initMemory();
     appendEntry('entry before dream', '✅');
