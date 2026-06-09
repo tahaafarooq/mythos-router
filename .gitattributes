@@ -1,0 +1,20 @@
+# Enforce LF line endings for all text files so receipt SHA-256 verification is
+# byte-stable across platforms. A Windows checkout with core.autocrlf=true would
+# otherwise rewrite line endings on checkout and produce false "drift" reports
+# when `receipts verify` re-hashes files.
+* text=auto eol=lf
+
+# Explicitly treat source and config as LF text.
+*.ts   text eol=lf
+*.js   text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# Binary assets must never be normalized.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
