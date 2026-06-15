@@ -48,7 +48,11 @@ export async function receiptsCommand(
   }
 
   if (normalizedAction === 'verify') {
-    printReceiptVerification(target ?? 'latest', wantsJson(options));
+    if (target) {
+      printReceiptVerification(target, wantsJson(options));
+    } else {
+      verifyAllReceipts(wantsJson(options));
+    }
     return;
   }
 
@@ -123,19 +127,23 @@ function printReceipt(target: string, options: ReceiptsOptions = {}): void {
   }
 }
 
-function printReceiptVerification(target: string, asJson?: boolean): void {
+function printReceiptVerification(target: string, asJson?: boolean): boolean {
   const receipt = readReceipt(target);
   if (!receipt) {
     error(`Receipt not found: ${target}`);
-    return;
+    process.exitCode = 1;
+    return false;
   }
 
   const verification = verifyReceipt(receipt);
   const integrityOk = verifyReceiptIntegrity(receipt);
+  const passed = verification.ok && integrityOk;
+  // Fail closed: a verify that can't fail a script is worthless for CI.
+  if (!passed) process.exitCode = 1;
 
   if (asJson) {
     console.log(JSON.stringify({ ...verification, integrityOk }, null, 2));
-    return;
+    return passed;
   }
 
   console.log(heading(`Verify Receipt ${receipt.id}`));
@@ -159,10 +167,53 @@ function printReceiptVerification(target: string, asJson?: boolean): void {
   }
 
   console.log();
-  if (verification.ok && integrityOk) {
+  if (passed) {
     success('Receipt verification passed.');
   } else {
     warn('Receipt verification found drift or integrity issues.');
+  }
+  return passed;
+}
+
+function verifyAllReceipts(asJson?: boolean): void {
+  const receipts = listReceipts(Number.MAX_SAFE_INTEGER);
+
+  if (receipts.length === 0) {
+    if (asJson) {
+      console.log(JSON.stringify({ count: 0, ok: true, receipts: [] }, null, 2));
+    } else {
+      info('No SWD receipts found to verify.');
+    }
+    return;
+  }
+
+  if (asJson) {
+    const results = receipts.map((summary) => {
+      const receipt = readReceipt(summary.id);
+      if (!receipt) {
+        return { id: summary.id, ok: false, integrityOk: false, error: 'unreadable' };
+      }
+      const verification = verifyReceipt(receipt);
+      const integrityOk = verifyReceiptIntegrity(receipt);
+      return { id: receipt.id, ok: verification.ok, integrityOk, files: verification.files };
+    });
+    const allOk = results.every((r) => r.ok && r.integrityOk);
+    if (!allOk) process.exitCode = 1;
+    console.log(JSON.stringify({ count: results.length, ok: allOk, receipts: results }, null, 2));
+    return;
+  }
+
+  console.log(heading(`Verify ${receipts.length} receipt(s)`));
+  let failed = 0;
+  for (const summary of receipts) {
+    const passed = printReceiptVerification(summary.id, false);
+    if (!passed) failed += 1;
+    console.log(hr());
+  }
+  if (failed === 0) {
+    success(`All ${receipts.length} receipt(s) verified.`);
+  } else {
+    error(`${failed} of ${receipts.length} receipt(s) failed verification.`);
   }
 }
 
